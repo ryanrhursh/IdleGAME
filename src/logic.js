@@ -26,7 +26,7 @@ export function regionOf(id) {
   const w = []; for (let i = 0; i < KINDS; i++) w.push(Math.pow(r(), 2.2));
   const total = w.reduce((a, b) => a + b, 0) || 1;
   return {
-    id, name: `${adj} ${noun}`, pal: id === 'M' ? 2 : Math.floor(r() * PALETTES.length), len: 30 + Math.floor(r() * 16),
+    id, name: `${adj} ${noun}`, pal: id === 'M' ? 2 : Math.floor(r() * PALETTES.length), len: 60 + Math.floor(r() * 31),
     weather: WEATHER[Math.floor(r() * WEATHER.length)], weights: w.map((x) => x / total), hint: HINT_WORDS[Math.floor(r() * HINT_WORDS.length)],
   };
 }
@@ -54,12 +54,12 @@ export function defOf(p) {
 // ---------- state ----------
 export function newState(now = Date.now()) {
   return {
-    v: 2, created: now, last: now, charm: 45, miles: 0, pressure: 22, unfolds: 0, metCount: 0,
+    v: 2, created: now, last: now, charm: 70, miles: 0, pressure: 22, unfolds: 0, metCount: 0,
     grid: { x0: 6, y0: 4, x1: 15, y1: 9 },
     rooms: [{ id: 1, type: 'sleeper', x: 6, y: 4, w: 3, h: 3 }, { id: 2, type: 'dining', x: 9, y: 4, w: 4, h: 3 }, { id: 3, type: 'corridor', x: 6, y: 7, w: 10, h: 1 }],
     nextRoom: 4, unlocked: ['sleeper', 'dining', 'parlor', 'corridor'],
     passengers: [], nextPid: 1, keepsakes: [], postcards: [], tickets: [], journal: [],
-    line: { seed: Math.floor(Math.random() * 1e9), region: 'M', regionStart: 0, nextStop: 2.5, stopIndex: 0, nextLandmark: 4, forkChosen: null, forkAnnounced: false, pending: null },
+    line: { seed: Math.floor(Math.random() * 1e9), region: 'M', regionStart: 0, nextStop: 2.5, stopIndex: 0, nextLandmark: 7, forkChosen: null, forkAnnounced: false, pending: null },
     hint: 0, auto: false, sound: true, name: '', paintSeen: false,
   };
 }
@@ -197,10 +197,17 @@ export class Sim {
   demolish(id) {
     const r = this.roomById.get(id); if (!r) return false;
     if (this.s.rooms.length <= 2) return false;
-    this.s.charm += Math.round(this.roomCost(r.type, r.w, r.h) * 0.6 / Math.pow(1.05, 0));
+    this.s.charm += Math.round(this.roomCost(r.type, r.w, r.h) * 0.6);
     this.s.rooms = this.s.rooms.filter((q) => q.id !== id);
     this.index(); return true;
   }
+  upgradeCost(r) { return Math.round(this.roomCost(r.type, r.w, r.h) * 0.7 * Math.pow(1.7, r.lv || 0)); }
+  upgrade(id) {
+    const r = this.roomById.get(id); if (!r) return 'No such room.';
+    const c = this.upgradeCost(r); if (c > this.s.charm) return 'Not enough Charm.';
+    this.s.charm -= c; r.lv = (r.lv || 0) + 1; this.version++; if (this.h.layout) this.h.layout(); return null;
+  }
+  restyle(id) { const r = this.roomById.get(id); if (!r) return; r.style = ((r.style || 0) + 1) % 4; this.version++; if (this.h.layout) this.h.layout(); }
   unfoldCost(dir) {
     const g = this.s.grid, cells = dir === 'n' || dir === 's' ? g.x1 - g.x0 + 1 : g.y1 - g.y0 + 1;
     return Math.round(10 * cells * Math.pow(1.1, this.s.unfolds));
@@ -226,7 +233,7 @@ export class Sim {
     if (this.freeBeds() <= 0) return 'No berth free. Build more Sleeper space, or wait for someone to reach their stop.';
     const c = passengerAt(st.idx, L.seed), s = this.s;
     const sl = s.rooms.find((r) => r.type === 'sleeper');
-    const p = { id: s.nextPid++, kind: c.kind, idx: c.idx, gt: c.gt, name: c.name, mood: 6, tales: 0, board: s.miles, dest: s.miles + 45 + Math.floor(rng(hash('d' + c.idx + L.seed))() * 90), x: sl.x + 0.5, y: sl.y + 0.5 };
+    const p = { id: s.nextPid++, kind: c.kind, idx: c.idx, gt: c.gt, name: c.name, mood: 6, tales: 0, board: s.miles, dest: s.miles + 130 + Math.floor(rng(hash('d' + c.idx + L.seed))() * 200), x: sl.x + 0.5, y: sl.y + 0.5 };
     s.passengers.push(p); s.metCount = st.idx + 1; L.pending = null;
     if (c.gift && !s.unlocked.includes(c.gift)) { s.unlocked.push(c.gift); this.ev('unlock', c.gift, c); }
     this.syncRt(); this.ev('board', p, c); return null;
@@ -261,7 +268,8 @@ export class Sim {
       const tx = room.x + Math.floor(Math.random() * room.w), ty = room.y + Math.floor(Math.random() * room.h);
       const path = this.path(Math.floor(p.x), Math.floor(p.y), tx, ty);
       if (!path) { rt.t = 3; return; }
-      rt.path = path; rt.i = 0; rt.room = room.id; rt.state = path.length > 1 ? 'walk' : 'use'; rt.use = 6 + Math.random() * 8; rt.len = path.length;
+      rt.path = path; rt.i = 0; rt.room = room.id; rt.state = path.length > 1 ? 'walk' : 'use'; rt.use = 6 + Math.random() * 8; rt.len = path.length; rt.emoted = false;
+      if (rt.room !== undefined) p.trip = p.trip ? p.trip * 0.75 + path.length * 0.25 : path.length;
     } else if (rt.state === 'walk') {
       const nk = rt.path[rt.i + 1];
       if (nk === undefined) { rt.state = 'use'; return; }
@@ -272,22 +280,24 @@ export class Sim {
     } else if (rt.state === 'use') {
       rt.use -= dt;
       const room = this.roomById.get(rt.room), d = defOf(p), fav = room && room.type === HOBBY_ROOM[d.hobby];
-      const walkPenalty = (rt.len || 0) > 16 ? 0.7 : 1;
-      this.s.charm += 0.22 * this.moodF(p) * (fav ? 2 : 1) * this.charmMul * (this.s.line.pending ? 0.5 : 1) * walkPenalty * dt;
+      const L = rt.len || 0, walkPenalty = L <= 6 ? 1.25 : L <= 12 ? 1 : L <= 18 ? 0.85 : 0.7;
+      if (!rt.emoted) { rt.emoted = true; if (fav) this.ev('emote', { id: p.id, kind: 'heart' }); }
+      this.s.charm += 0.45 * this.moodF(p) * (fav ? 2 : 1) * (1 + 0.2 * ((room && room.lv) || 0)) * this.charmMul * (this.s.line.pending ? 0.5 : 1) * walkPenalty * dt;
       this.addMood(p, (fav ? 0.5 : 0.15) * dt);
       if (rt.use <= 0) { rt.state = 'idle'; rt.t = 1 + Math.random() * 2.5; rt.room = rt.room; }
     }
   }
   charmRate() {
     let sum = 0;
-    for (const p of this.s.passengers) sum += 0.22 * this.moodF(p) * 0.55 * 1.3;
-    return sum * this.charmMul * (this.s.line.pending ? 0.5 : 1);
+    for (const p of this.s.passengers) sum += 0.45 * this.moodF(p) * 0.55 * 1.3;
+    const rooms = this.s.rooms.filter((r) => r.type !== 'corridor' && r.type !== 'sleeper'), lv = rooms.length ? rooms.reduce((x, r) => x + (r.lv || 0), 0) / rooms.length : 0;
+    return sum * (1 + 0.2 * lv * 0.6) * this.charmMul * (this.s.line.pending ? 0.5 : 1);
   }
 
   // ---------- the Line ----------
   speedMul() { return 1 + ((this.s.pressure - 22) / 100) * 2.0; }
   region() { return regionOf(this.s.line.region); }
-  forkInfo() { const id = this.s.line.region, rg = regionOf(id); return { L: regionOf(id + 'L'), R: regionOf(id + 'R'), at: this.s.line.regionStart + rg.len - 9, end: this.s.line.regionStart + rg.len }; }
+  forkInfo() { const id = this.s.line.region, rg = regionOf(id); return { L: regionOf(id + 'L'), R: regionOf(id + 'R'), at: this.s.line.regionStart + rg.len - 14, end: this.s.line.regionStart + rg.len }; }
   chooseFork(side) { this.s.line.forkChosen = side; }
   stoke(q) {
     const perfect = Math.abs(q - 0.5) < 0.12;
@@ -305,7 +315,7 @@ export class Sim {
     let left = dm;
     let guard = 0;
     while (left > 1e-9 && !L.pending && guard++ < 400) {
-      const reg = regionOf(L.region), end = L.regionStart + reg.len, forkAt = end - 9;
+      const reg = regionOf(L.region), end = L.regionStart + reg.len, forkAt = end - 14;
       const ev = [[L.nextStop, 'stop'], [L.nextLandmark, 'landmark'], [end, 'region']];
       if (!L.forkAnnounced) ev.push([forkAt, 'fork']);
       let dep = null; for (const p of s.passengers) if (!dep || p.dest < dep.dest) dep = p;
@@ -318,7 +328,7 @@ export class Sim {
       if (type === 'landmark') {
         const r = rng(hash(`lm:${L.seed}:${Math.floor(m * 10)}`));
         this.postcard(`${POSTCARD_OPEN[Math.floor(r() * POSTCARD_OPEN.length)]} ${LANDMARKS[Math.floor(r() * LANDMARKS.length)]} in the ${reg.name}.`, reg.name);
-        L.nextLandmark = m + 4 + r() * 5;
+        L.nextLandmark = m + 8 + r() * 7;
       } else if (type === 'fork') {
         L.forkAnnounced = true; this.ev('fork', this.forkInfo());
       } else if (type === 'region') {
@@ -332,7 +342,7 @@ export class Sim {
         this.depart(dep);
       } else if (type === 'stop') {
         const i = L.stopIndex++, r = rng(hash(`s:${L.seed}:${i}`));
-        L.nextStop = m + 6 + r() * 4;
+        L.nextStop = m + 11 + r() * 6;
         const name = stopName(L.seed, i), isPass = i === 0 || r() > 0.3;
         if (isPass) { L.pending = { idx: s.metCount, name, mile: m }; this.ev('stop', L.pending); }
         else { const bonus = 8 + Math.round(r() * 10); s.charm += bonus; this.postcard(`A quick whistle-stop at ${name}. The stationmaster handed up a tin of buttons (+${bonus} Charm).`, name); this.ev('whistle', name, bonus); }

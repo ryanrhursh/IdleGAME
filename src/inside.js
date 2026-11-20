@@ -6,6 +6,7 @@ import { GW, GH, rng, hash, clamp } from './logic.js';
 import { toon, basic, glowSprite, mesh, G, box, cyl, sph, cone, makeFigure, gearGeometry } from './gfx.js';
 
 const FLOOR_H = 0.1;
+const STYLES = [[1, 1, 1], [1.25, 1.0, 0.8], [0.8, 1.0, 1.3], [1.3, 0.8, 1.1]];
 
 function stitchTexture() {
   const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
@@ -133,7 +134,7 @@ export class InsideView {
       const def = ROOMS[r.type], rr = rng(r.id);
       for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) {
         d.position.set(x + 0.5, FLOOR_H / 2, y + 0.5); d.scale.set(1, FLOOR_H, 1); d.rotation.set(0, 0, 0); d.updateMatrix(); this.floors.setMatrixAt(i, d.matrix);
-        this.col.setHex((x + y) % 2 ? def.floor : def.floor2); this.floors.setColorAt(i, this.col); i++;
+        this.col.setHex((x + y) % 2 ? def.floor : def.floor2); const st = STYLES[r.style || 0]; this.col.r = Math.min(1, this.col.r * st[0]); this.col.g = Math.min(1, this.col.g * st[1]); this.col.b = Math.min(1, this.col.b * st[2]); this.floors.setColorAt(i, this.col); i++;
       }
     }
     this.floors.count = i; this.floors.instanceMatrix.needsUpdate = true; this.floors.instanceColor.needsUpdate = true;
@@ -160,12 +161,14 @@ export class InsideView {
     // furniture
     const alive = new Set();
     for (const r of s.rooms) {
-      const key = `${r.id}:${r.type}:${r.w}x${r.h}`; alive.add(r.id);
+      const key = `${r.id}:${r.type}:${r.w}x${r.h}:${r.lv || 0}`; alive.add(r.id);
       const old = this.propGroups.get(r.id);
       if (old && old.userData.key === key) continue;
       if (old) { this.scene.remove(old); this.propGroups.delete(r.id); }
       const grp = new THREE.Group(); grp.userData.key = key; grp.position.set(r.x, FLOOR_H, r.y);
       const R = rng(hash(key)); BUILDERS[r.type](grp, r.w, r.h, R);
+      const lv = Math.min(r.lv || 0, 8);
+      for (let k = 0; k < lv * 2; k++) { const gl = glowSprite(k % 2 ? 0xffd890 : 0xff9ac0, 0.5, 0.9); gl.position.set(((k + 0.5) / (lv * 2)) * r.w, 0.62 + (k % 2) * 0.05, 0.06); grp.add(gl); grp.add(sph(0xfff0b0, ((k + 0.5) / (lv * 2)) * r.w, 0.6 + (k % 2) * 0.05, 0.06, 0.07, 0.07, 0.07, { emissive: 0xffe0a0, emissiveIntensity: 1.6 })); }
       if (r.born && Date.now() - r.born < 3000) grp.userData.born = performance.now();
       this.scene.add(grp); this.propGroups.set(r.id, grp);
     }
@@ -180,6 +183,10 @@ export class InsideView {
       if (dir === 'n') { x = g.x0 + R() * (g.x1 - g.x0 + 1); z = g.y0 + R(); } else if (dir === 's') { x = g.x0 + R() * (g.x1 - g.x0 + 1); z = g.y1 + R(); } else if (dir === 'w') { x = g.x0 + R(); z = g.y0 + R() * (g.y1 - g.y0 + 1); } else { x = g.x1 + R(); z = g.y0 + R() * (g.y1 - g.y0 + 1); }
       const sp = glowSprite(0xffe2a0, 0.5 + R() * 0.6, 1); sp.position.set(x, 0.3, z); sp.userData = { vy: 0.8 + R() * 1.6, life: 1.2 + R() }; this.sparkGroup.add(sp); this.sparks.push(sp);
     }
+  }
+  emote(pid, kind) {
+    const f = this.figures.get(pid); if (!f) return;
+    const sp = glowSprite(kind === 'heart' ? 0xff7aa8 : 0xffe08a, 0.55, 1); sp.position.set(f.position.x, 1.1, f.position.z); sp.userData = { vy: 0.7, life: 1.4 }; this.sparkGroup.add(sp); this.sparks.push(sp);
   }
   setSelected(room) { this.selRoom = room; this.updateSel(); }
   updateSel() {

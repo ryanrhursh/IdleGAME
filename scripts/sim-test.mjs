@@ -63,6 +63,11 @@ ok(rep.charm > 0 && rep.miles > 0, `offline earns (${fmt(rep.charm)} Charm, ${re
 ok(rep.waiting || rep.postcards.length >= 0, 'offline stops politely at a passenger');
 s2.auto = true; const rep2 = sim2.offline(20000); ok(rep2.boarded.length >= 0, 'auto mode can board people while away');
 
+// furnishing
+s.charm = 5000; const rm = s.rooms.find((r) => r.type === 'dining'); const lvBefore = rm.lv || 0, cost1 = sim.upgradeCost(rm);
+ok(sim.upgrade(rm.id) === null && rm.lv === lvBefore + 1, 'furnish raises the room level');
+ok(sim.upgradeCost(rm) > cost1, 'each level costs more than the last');
+sim.restyle(rm.id); ok(rm.style === 1, 'restyle cycles the colors');
 // save round trip
 const back = loadState(JSON.stringify(s)); ok(back && back.rooms.length === s.rooms.length, 'save round-trips');
 console.log(fails ? `${fails} FAILED` : 'all passed'); process.exit(fails ? 1 : 0);

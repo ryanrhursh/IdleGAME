@@ -52,6 +52,7 @@ modal.addEventListener('click', (e) => { if (e.target === modal && !modal.queryS
 
 // ---------- sim hooks ----------
 hooks.layout = () => { sheetDirty = true; };
+hooks.emote = (e) => { if (view === 'inside') world.inside.emote(e.id, e.kind); };
 hooks.stop = (st) => {
   toast(`The Marigold slows into <b>${esc(st.name)}</b>.`); audio.whistle(); platformDirty = true;
   setTimeout(() => { if (state.line.pending && !modalOpen && view === 'line') stopModal(); }, 1600);
@@ -143,6 +144,7 @@ function passengerModal(p) {
   openModal(`<div class="eyebrow">${esc(d.trait)}</div><h2>${esc(p.name)}</h2>
   <div><small style="color:var(--muted)">Fondness for the train</small>${moodBar(p)}</div>
   <p style="color:var(--muted)">Getting off in about <b style="color:var(--gold)">${Math.max(1, Math.round(p.dest - state.miles))} miles</b>. Likes ${esc(d.hobby === 'chat' ? 'good company' : ROOMS[HOBBY_ROOM[d.hobby]].name)}.</p>
+  ${p.trip ? `<p style="color:var(--muted);font-size:13px">Average trip: <b style="color:var(--gold)">${Math.round(p.trip)} steps</b>. ${p.trip <= 6 ? 'Short walks make them happy: +25% Charm.' : p.trip <= 12 ? 'A comfortable walk.' : 'Long walks wear on them. Move their favorite rooms closer to the berths.'}</p>` : ''}
   <ul class="tales">${d.tales.map((t, i) => `<li class="${i < p.tales ? '' : 'locked'}">${i < p.tales ? esc(t) : 'A tale they have not told yet. It comes when they feel at home.'}</li>`).join('')}</ul>
   <div class="row2"><button class="btn" id="find">Find them inside</button><button class="btn ghost" id="x">Close</button></div>
   <div><small style="color:var(--muted)">Rename</small><input type="text" id="nm" maxlength="22" value="${esc(p.name)}"></div>`);
@@ -223,8 +225,9 @@ function renderSheet() {
     const r = sim.roomById.get(selRoom.id), d = ROOMS[r.type], here = state.passengers.filter((p) => sim.roomAt(Math.floor(p.x), Math.floor(p.y)) === r);
     const refund = Math.round(sim.roomCost(r.type, r.w, r.h) * 0.6 / 1);
     sheet.hidden = false;
-    sheet.innerHTML = `<h3>${d.name}<small>${r.w} × ${r.h}${r.type === 'sleeper' ? ` · ${Math.floor(r.w * r.h / 3)} berths` : ''}</small></h3><p style="margin:0;color:var(--muted);font-size:13px">${d.blurb}</p>
+    sheet.innerHTML = `<h3>${d.name}${r.lv ? ' ' + '\u2605'.repeat(Math.min(r.lv, 5)) : ''}<small>${r.w} × ${r.h}${r.type === 'sleeper' ? ` · ${Math.floor(r.w * r.h / 3)} berths` : ''}</small></h3><p style="margin:0;color:var(--muted);font-size:13px">${d.blurb}</p>
     ${here.length ? `<div class="chips">${here.map((p) => `<span class="chip">${esc(p.name)}</span>`).join('')}</div>` : ''}
+    ${r.type !== 'corridor' ? `<div class="grid"><button class="act" data-a="upgrade" ${sim.upgradeCost(r) <= state.charm ? '' : 'disabled'}><b>Furnish: level ${(r.lv || 0)} \u2192 ${(r.lv || 0) + 1}</b><span class="cost ${sim.upgradeCost(r) <= state.charm ? '' : 'no'}">${sim.upgradeCost(r)} Charm</span><small>+20% Charm from everyone who uses it.</small></button><button class="act" data-a="restyle"><b>Restyle</b><span class="cost">Free</span><small>Change the colors.</small></button></div>` : ''}
     <div class="row2"><button class="btn ghost sm" data-a="remove" ${state.rooms.length <= 2 ? 'disabled' : ''}>Take it down (+${refund})</button><button class="btn ghost sm" data-a="close">Close</button></div>`;
   } else { sheet.hidden = true; }
 }
@@ -234,6 +237,8 @@ sheet.addEventListener('click', (e) => {
   if (b.dataset.b) { startDraw(b.dataset.b); return; }
   if (b.dataset.u) { const r = sim.unfold(b.dataset.u); if (r) toast(esc(r)); else { audio.grow(); setHint(4); } sheetDirty = true; return; }
   if (b.dataset.a === 'close') { sheetMode = null; selRoom = null; world.inside.setSelected(null); }
+  if (b.dataset.a === 'upgrade' && selRoom) { const r = sim.upgrade(selRoom.id); if (r) toast(esc(r)); else { audio.chord(); } }
+  if (b.dataset.a === 'restyle' && selRoom) { sim.restyle(selRoom.id); audio.pop(); }
   if (b.dataset.a === 'remove' && selRoom) { sim.demolish(selRoom.id); selRoom = null; sheetMode = null; world.inside.setSelected(null); audio.pop(); }
   sheetDirty = true;
 });
@@ -322,7 +327,7 @@ function updateHud(dt, time) {
     if (platformDirty) { renderPlatform(); platformDirty = false; } else renderPlatform();
     if (forkDirty) { renderFork(); forkDirty = false; }
     if (sheetDirty) { renderSheet(); sheetDirty = false; }
-    else if (sheetMode === 'build' || sheetMode === 'unfold') renderSheetCosts();
+    else if (sheetMode === 'build' || sheetMode === 'unfold' || sheetMode === 'room') renderSheetCosts();
     if (view === 'line' && !L.forkChosen && L.forkAnnounced) renderFork();
   }
   // room labels
