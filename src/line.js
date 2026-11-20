@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { PALETTES } from './data.js';
-import { regionOf, stopName, hash, rng, clamp, KINDS } from './logic.js';
+import { regionOf, stopName, hash, rng, clamp, KINDS, landmarkFor, autoSide } from './logic.js';
 import { toon, basic, glowSprite, glowTexture, mesh, G, box, cyl, sph, cone, makeFigure, signTexture, lerp } from './gfx.js';
 
 export const U = 60; // world units per mile
@@ -30,6 +30,34 @@ function propGeo(kind) {
   else if (kind === 4) { cyl(0.05, 0.07, 2.6, 0, 1.3, 0, 0x2a2030); ball(0.28, 0, 2.7, 0, 0xfff0b0); }
   else { P.push(colored(at(new THREE.ConeGeometry(0.35, 2.2, 5), 0, 1.1, 0), 0xffffff)); P.push(colored(at(new THREE.ConeGeometry(0.25, 1.5, 5), 0.5, 0.75, 0.2), 0xdddddd)); P.push(colored(at(new THREE.ConeGeometry(0.22, 1.2, 5), -0.4, 0.6, -0.3), 0xeeeeee)); }
   return mergeGeometries(P);
+}
+
+function makeLandmark(idx) {
+  const g = new THREE.Group(), W = 0xf2ead8;
+  if (idx === 0) { // windmill whose sails turn the wrong way
+    g.add(cone(0xb89a78, 0, 3.0, 0, 3.4, 6.0, 3.4)); g.add(box(0x6a4a3a, 0, 6.6, 0, 0.8, 0.8, 0.8));
+    const hub = new THREE.Group(); hub.position.set(0, 6.4, -1.7); for (let i = 0; i < 4; i++) { const b = box(W, 0, 0, 0, 0.7, 4.6, 0.08); b.position.set(0, 0, 0); b.rotation.z = (i * Math.PI) / 2; b.geometry = b.geometry; const arm = new THREE.Group(); arm.rotation.z = (i * Math.PI) / 2; const bl = box(W, 0, 2.3, 0, 0.9, 4.2, 0.08); arm.add(bl); hub.add(arm); }
+    g.add(hub); g.userData.spin = hub; g.userData.spinDir = -1;
+  } else if (idx === 4) { // lighthouse nowhere near water
+    for (let i = 0; i < 5; i++) g.add(cyl(i % 2 ? 0xd04a4a : 0xf4f0e0, 0, 1.3 + i * 2.6, 0, 3.2 - i * 0.25, 2.6, 3.2 - i * 0.25));
+    g.add(cyl(0x2a2a34, 0, 13.6, 0, 3.0, 0.6, 3.0)); g.add(sph(0xfff0b0, 0, 14.6, 0, 1.8, 1.8, 1.8, { emissive: 0xfff0b0, emissiveIntensity: 1.8 })); const gl = glowSprite(0xffe6a0, 18, 0.9); gl.position.y = 14.6; g.add(gl);
+  } else if (idx === 3) { // scarecrows all facing the train
+    for (let i = 0; i < 6; i++) { const z = (i - 2.5) * 3.2, h = new THREE.Group(); h.position.set(0, 0, z); h.add(cyl(0x6a4a2a, 0, 1.6, 0, 0.14, 3.2, 0.14)); h.add(box(0x6a4a2a, 0, 2.5, 0, 0.1, 0.12, 2.2)); h.add(sph(0xe8c878, 0, 3.4, 0, 0.8, 0.8, 0.8)); h.add(cone(0xa04a3a, 0, 4.0, 0, 1.0, 0.9, 1.0)); h.rotation.y = 0.1 * i; g.add(h); }
+  } else if (idx === 5) { // a woman waving a very large flag from a hilltop
+    g.add(sph(0x5a7a4a, 0, 0, 0, 12, 7, 12)); g.add(cyl(0x4a3222, 0, 6.5, 0, 0.18, 7, 0.18)); g.add(box(0xf2b134, 1.8, 9, 0, 3.4, 2.2, 0.08)); const f = makeFigure(7); f.position.set(-0.8, 3.4, 0); f.scale.setScalar(1.6); g.add(f);
+  } else if (idx === 6) { // a row of lanterns lit for nobody
+    for (let i = 0; i < 8; i++) { const z = (i - 3.5) * 4; g.add(cyl(0x2a2030, 0, 1.4, z, 0.1, 2.8, 0.1)); g.add(sph(0xfff0b0, 0, 3.0, z, 0.6, 0.6, 0.6, { emissive: 0xfff0b0, emissiveIntensity: 1.6 })); const gl = glowSprite(0xffd890, 4, 0.8); gl.position.set(0, 3.0, z); g.add(gl); }
+  } else if (idx === 7) { // a house with a door in the roof
+    g.add(box(0xd8c4a0, 0, 2.0, 0, 5, 4, 4.4)); g.add(cone(0x8a3a3a, 0, 5.4, 0, 6.2, 3, 6.2)).rotation.y = Math.PI / 4; g.add(box(0x6a3a1a, 0, 6.6, 0, 1.2, 1.7, 0.2)); g.children.at(-1).rotation.x = -0.5; g.add(box(0xffd89a, 1.5, 2.4, 2.25, 1.1, 1.1, 0.08, { emissive: 0xffd89a, emissiveIntensity: 1 }));
+  } else if (idx === 9) { // standing stone wearing a scarf
+    g.add(sph(0xa8a8b8, 0, 3.6, 0, 3.2, 7.2, 2.6)); const sc = mesh(G.tor, toon(0xd04a6a), 0, 5.6, 0, 3.0, 3.0, 3.0); sc.rotation.x = Math.PI / 2; g.add(sc); g.add(box(0xd04a6a, 1.6, 4.6, 0, 0.5, 2.4, 0.3));
+  } else if (idx === 13) { // a cloud tethered to a fence post
+    g.add(cyl(0x6a4a2a, 0, 1.0, 0, 0.3, 2.0, 0.3)); for (const [x, y, z, r] of [[0, 8, 0, 3.4], [2.4, 7.6, 0.6, 2.6], [-2.4, 7.4, -0.4, 2.8], [0.6, 9.2, 0.4, 2.4]]) g.add(sph(0xffffff, x, y, z, r, r * 0.75, r, { emissive: 0x887788, emissiveIntensity: 0.5 }));
+    g.add(cyl(0xd8c8a0, 0.2, 4.6, 0, 0.05, 6.4, 0.05));
+  } else if (idx === 14) { // a ladder leaning on nothing, going up
+    for (const x of [-0.6, 0.6]) g.add(box(0x8a5a3a, x, 8, 0, 0.14, 16, 0.14)); for (let i = 0; i < 12; i++) g.add(box(0x8a5a3a, 0, 1 + i * 1.3, 0, 1.2, 0.1, 0.1));
+  } else return null;
+  g.visible = false; return g;
 }
 
 export class LineView {
@@ -85,6 +113,11 @@ export class LineView {
     // train, stations, fork gantry, smoke, weather
     this.buildTrain(); this.stations = [this.makeStation(), this.makeStation()]; this.stationFor = [-1, -1];
     this.buildFork(); this.buildSmoke(); this.buildWeather();
+    this.lmCache = new Map(); this.lmSlots = [{ g: null, mile: 0, key: '' }, { g: null, mile: 0, key: '' }];
+    this.gate = new THREE.Group(); for (const x of [-4.6, 4.6]) this.gate.add(box(0x3a3040, x, 3.2, 0, 0.5, 6.4, 0.5));
+    this.gate.add(box(0x3a3040, 0, 6.5, 0, 9.8, 0.6, 0.6));
+    this.gateSign = new THREE.Mesh(new THREE.PlaneGeometry(7.2, 2.4), new THREE.MeshBasicMaterial({ map: signTexture(['—']), side: THREE.DoubleSide })); this.gateSign.position.set(0, 7.9, 0); this.gate.add(this.gateSign);
+    const gateGlow = glowSprite(0xffd890, 6, 0.8); gateGlow.position.set(0, 6.5, 0.4); this.gate.add(gateGlow); this.gate.visible = false; this.scene.add(this.gate); this.gateKey = '';
     // palette state
     this.pal = { skyTop: new THREE.Color(), skyBot: new THREE.Color(), fog: new THREE.Color(), ground: new THREE.Color(), tint: new THREE.Color(), ridge: new THREE.Color() };
     this.from = null; this.to = null; this.palT = 1; this.skyT = 0; this.weatherType = 'clear'; this.weights = new Array(KINDS).fill(1 / KINDS); this.nextWeights = this.weights;
@@ -270,6 +303,28 @@ export class LineView {
       this.fork.position.set(0, 0, fz);
       if (this.forkSignFor !== L.region) { this.forkSignFor = L.region; this.setForkSigns(info); }
       this.forkBoards.forEach((b, i) => { const side = i === 0 ? 'L' : 'R', chosen = L.forkChosen; b.lamp.material.color.setHex(chosen === side ? 0x6aff9a : chosen ? 0x553030 : 0xffb04a); b.lamp.material.opacity = chosen === side ? 1 : chosen ? 0.35 : 0.6 + 0.4 * Math.sin(time * 4 + i); });
+    }
+    // landmarks that the postcards describe
+    const wantMile = L.nextLandmark, lmInfo = landmarkFor(L.seed, wantMile), wantKey = `${L.seed}:${Math.floor(wantMile * 10)}`;
+    if (!this.lmSlots.some((sl) => sl.key === wantKey)) {
+      const slot = this.lmSlots[0].mile <= this.lmSlots[1].mile ? this.lmSlots[0] : this.lmSlots[1];
+      if (slot.g) slot.g.visible = false;
+      if (!this.lmCache.has(lmInfo.idx)) { const g = makeLandmark(lmInfo.idx); if (g) this.scene.add(g); this.lmCache.set(lmInfo.idx, g); }
+      slot.g = this.lmCache.get(lmInfo.idx); slot.mile = wantMile; slot.key = wantKey; slot.side = lmInfo.side;
+    }
+    for (const sl of this.lmSlots) {
+      if (!sl.g) continue; const z = (sl.mile - miles) * U;
+      if (z < -160 || z > 420) { sl.g.visible = false; continue; }
+      sl.g.visible = true; sl.g.position.set(12.5, 0, z); sl.g.rotation.y = -Math.PI / 2;
+      if (sl.g.userData.spin) sl.g.userData.spin.rotation.z += dt * 0.5 * sl.g.userData.spinDir;
+    }
+    // the gate where one region becomes the next
+    const gz = (info.end - miles) * U;
+    this.gate.visible = gz > -80 && gz < 330 && L.forkAnnounced;
+    if (this.gate.visible) {
+      this.gate.position.set(0, 0, gz);
+      const side = L.forkChosen || autoSide(L.seed, L.region), nr = regionOf(L.region + side), gk = nr.id;
+      if (gk !== this.gateKey) { this.gateKey = gk; this.gateSign.material.map.dispose(); this.gateSign.material.map = signTexture([nr.name, 'Now entering'], 320, 110); this.gateSign.material.needsUpdate = true; }
     }
     // weather around the train
     const wt = this.weatherType; if (wt !== 'clear') {

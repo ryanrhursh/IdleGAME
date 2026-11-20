@@ -1,4 +1,4 @@
-import { Sim, newState, loadState, fmt, clamp, defOf, passengerAt, regionOf, stopName, GW, GH } from './logic.js';
+import { Sim, newState, loadState, fmt, clamp, defOf, passengerAt, regionOf, stopName, landmarkFor, GW, GH } from './logic.js';
 import { World } from './world.js';
 import { Audio } from './audio.js';
 import { ROOMS, LORE, HINTS, HOBBY_ROOM } from './data.js';
@@ -15,7 +15,7 @@ const audio = new Audio(); audio.enabled = state.sound !== false;
 const hooks = {};
 const sim = new Sim(state, hooks);
 const world = new World($('gl'), sim);
-window.__game = { sim, world, state };
+window.__game = { sim, world, state, landmarkFor };
 function save() { try { state.last = Date.now(); localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (e) { /* storage may be unavailable */ } }
 addEventListener('visibilitychange', () => { if (document.hidden) save(); });
 addEventListener('pagehide', save);

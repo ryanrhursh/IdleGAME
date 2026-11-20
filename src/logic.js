@@ -30,6 +30,11 @@ export function regionOf(id) {
     weather: WEATHER[Math.floor(r() * WEATHER.length)], weights: w.map((x) => x / total), hint: HINT_WORDS[Math.floor(r() * HINT_WORDS.length)],
   };
 }
+export function landmarkFor(seed, mile) {
+  const r = rng(hash(`lm:${seed}:${Math.floor(mile * 10)}`));
+  return { open: POSTCARD_OPEN[Math.floor(r() * POSTCARD_OPEN.length)], idx: Math.floor(r() * LANDMARKS.length), next: 8 + r() * 7, side: r() < 0.8 ? 1 : -1 };
+}
+export function autoSide(seed, region) { return rng(hash(`f:${seed}:${region}`))() < 0.5 ? 'L' : 'R'; }
 export function stopName(seed, i) { const r = rng(hash(`stop:${seed}:${i}`)); return `${STOP_A[Math.floor(r() * STOP_A.length)]} ${STOP_B[Math.floor(r() * STOP_B.length)]}`; }
 
 // ---------- passengers ----------
@@ -326,13 +331,13 @@ export class Sim {
       s.miles += step; left -= step;
       if (s.miles < m - 1e-9) break;
       if (type === 'landmark') {
-        const r = rng(hash(`lm:${L.seed}:${Math.floor(m * 10)}`));
-        this.postcard(`${POSTCARD_OPEN[Math.floor(r() * POSTCARD_OPEN.length)]} ${LANDMARKS[Math.floor(r() * LANDMARKS.length)]} in the ${reg.name}.`, reg.name);
-        L.nextLandmark = m + 8 + r() * 7;
+        const lm = landmarkFor(L.seed, m);
+        this.postcard(`${lm.open} ${LANDMARKS[lm.idx]} in the ${reg.name}.`, reg.name);
+        L.nextLandmark = m + lm.next;
       } else if (type === 'fork') {
         L.forkAnnounced = true; this.ev('fork', this.forkInfo());
       } else if (type === 'region') {
-        const side = L.forkChosen || (rng(hash(`f:${L.seed}:${L.region}`))() < 0.5 ? 'L' : 'R');
+        const side = L.forkChosen || autoSide(L.seed, L.region);
         L.region = L.region + side; L.regionStart = m; L.forkChosen = null; L.forkAnnounced = false;
         const nr = regionOf(L.region);
         if (!s.tickets.includes(nr.name)) s.tickets.push(nr.name);
