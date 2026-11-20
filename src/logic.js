@@ -1,7 +1,12 @@
-// Game rules and simulation. No rendering code lives here.
-import { SEASONS, SEASON_MS, BUILD, FOLK, BARKS, WINTER_BARKS, ANECDOTES, LORE, BOONS, GENERATED, CHOICES, GEN_START, GEN_STEP } from './data.js';
+// Game rules and simulation for the Marigold Line. No rendering code lives here.
+import { ROOMS, HOBBY_ROOM, PASSENGERS, GEN_FIRST, GEN_LAST, GEN_TYPES, REGION_ADJ, REGION_NOUN, STOP_A, STOP_B, PALETTES, WEATHER, HINT_WORDS, LANDMARKS, POSTCARD_OPEN, LORE } from './data.js';
+
+export const GW = 24, GH = 16;
+export const BASE_SPEED = 0.12; // miles per second at idle pressure
+export const KINDS = 6; // scenery prop kinds
 
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+export function hash(str) { let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
 export function rng(seed) {
   let a = seed >>> 0;
   return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
@@ -9,510 +14,376 @@ export function rng(seed) {
 export function fmt(n) {
   if (!isFinite(n)) return '0';
   if (n < 1000) return n < 10 && n % 1 ? n.toFixed(1) : String(Math.floor(n));
-  const sfx = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc'];
+  const sfx = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi'];
   let i = 0; while (n >= 1000 && i < sfx.length - 1) { n /= 1000; i++; }
   return (n < 10 ? n.toFixed(2) : n < 100 ? n.toFixed(1) : Math.floor(n)) + sfx[i];
 }
 
-export function seasonAt(ms) {
-  const p = (ms / SEASON_MS) % 4, idx = Math.floor(p), f = p - idx;
-  const a = SEASONS[idx], b = SEASONS[(idx + 1) % 4];
-  const t = clamp((f - 0.7) / 0.3, 0, 1), k = t * t * (3 - 2 * t);
-  return { cur: a, next: b, k, idx, col: a.col.map((c, i) => c + (b.col[i] - c) * k), msLeft: (1 - f) * SEASON_MS };
-}
-
-export const defaultMods = () => ({ value: 1, cap: 4, wspeed: 1, cog: 1, chime: 0.2, mood: 1, drip: 1, offline: 1, lamp: 0, speed: 1 });
-
-function mkNode(id, p, x, y, z, bx = 0, by = 0, bz = 0) {
-  return { id, p, x, y, z, bx, by, bz, b: null, born: 0, charge: 4, route: 0, alt: 0, note: 0, dead: false };
-}
-
-export function newState(now = Date.now()) {
+// ---------- regions (deterministic from an id like "M", "ML", "MLR") ----------
+export function regionOf(id) {
+  const r = rng(hash('region:' + id));
+  const adj = REGION_ADJ[Math.floor(r() * REGION_ADJ.length)], noun = REGION_NOUN[Math.floor(r() * REGION_NOUN.length)];
+  const w = []; for (let i = 0; i < KINDS; i++) w.push(Math.pow(r(), 2.2));
+  const total = w.reduce((a, b) => a + b, 0) || 1;
   return {
-    v: 1, created: now, last: now, sap: 30, cogs: 2, total: 0, drops: 0,
-    nodes: [mkNode(0, -1, 0, 0, 0), mkNode(1, 0, 0, 1.3, 0, 0.05, 0.1, 0), mkNode(2, 1, 0.05, 2.5, 0.05, -0.08, 0.1, 0.04), mkNode(3, 2, 0.12, 3.6, 0.0, 0.06, 0.12, -0.05)],
-    bridges: [], winders: [], choices: {}, journal: [], hint: 0, hollow: 0, palette: 'auto', sound: true, treeName: '', nextWinder: 0, giftsGiven: {},
+    id, name: `${adj} ${noun}`, pal: id === 'M' ? 2 : Math.floor(r() * PALETTES.length), len: 30 + Math.floor(r() * 16),
+    weather: WEATHER[Math.floor(r() * WEATHER.length)], weights: w.map((x) => x / total), hint: HINT_WORDS[Math.floor(r() * HINT_WORDS.length)],
   };
 }
+export function stopName(seed, i) { const r = rng(hash(`stop:${seed}:${i}`)); return `${STOP_A[Math.floor(r() * STOP_A.length)]} ${STOP_B[Math.floor(r() * STOP_B.length)]}`; }
 
+// ---------- passengers ----------
+export function passengerAt(index, seed) {
+  if (index < PASSENGERS.length) { const d = PASSENGERS[index]; return { kind: 'a', idx: index, name: d.name, trait: d.trait, hobby: d.hobby, gift: d.gift, line: d.line, tales: d.tales, keep: d.keep }; }
+  const r = rng(hash(`pass:${seed}:${index}`));
+  const gt = Math.floor(r() * GEN_TYPES.length), g = GEN_TYPES[gt];
+  const first = GEN_FIRST[Math.floor(r() * GEN_FIRST.length)], last = GEN_LAST[Math.floor(r() * GEN_LAST.length)];
+  const n = first;
+  return {
+    kind: 'g', idx: index, gt, name: `${first} ${last}`, trait: g.trait, hobby: g.hobby, gift: HOBBY_ROOM[g.hobby] === 'parlor' ? null : (HOBBY_ROOM[g.hobby] || null),
+    line: `${first} ${last} steps onto the platform with a single bag and a look of quiet certainty. "${g.trait}. That is all you need to know. May I come aboard?"`,
+    tales: g.tales.map((t) => t.replace(/\{n\}/g, n)), keep: { name: `${first}'s keepsake`, line: 'Something small is left behind, and it makes the room feel kinder.' },
+  };
+}
+export function defOf(p) {
+  if (p.kind === 'a') { const d = PASSENGERS[p.idx]; return { ...d, kind: 'a' }; }
+  const g = GEN_TYPES[p.gt], n = p.name.split(' ')[0];
+  return { trait: g.trait, hobby: g.hobby, tales: g.tales.map((t) => t.replace(/\{n\}/g, n)), keep: { name: `${n}'s keepsake`, line: 'Something small is left behind, and it makes the room feel kinder.' } };
+}
+
+// ---------- state ----------
+export function newState(now = Date.now()) {
+  return {
+    v: 2, created: now, last: now, charm: 45, miles: 0, pressure: 22, unfolds: 0, metCount: 0,
+    grid: { x0: 6, y0: 4, x1: 15, y1: 9 },
+    rooms: [{ id: 1, type: 'sleeper', x: 6, y: 4, w: 3, h: 3 }, { id: 2, type: 'dining', x: 9, y: 4, w: 4, h: 3 }, { id: 3, type: 'corridor', x: 6, y: 7, w: 10, h: 1 }],
+    nextRoom: 4, unlocked: ['sleeper', 'dining', 'parlor', 'corridor'],
+    passengers: [], nextPid: 1, keepsakes: [], postcards: [], tickets: [], journal: [],
+    line: { seed: Math.floor(Math.random() * 1e9), region: 'M', regionStart: 0, nextStop: 2.5, stopIndex: 0, nextLandmark: 4, forkChosen: null, forkAnnounced: false, pending: null },
+    hint: 0, auto: false, sound: true, name: '', paintSeen: false,
+  };
+}
 export function loadState(raw, now = Date.now()) {
   try {
     const s = JSON.parse(raw);
-    if (!s || s.v !== 1 || !Array.isArray(s.nodes) || s.nodes.length < 4) return null;
+    if (!s || s.v !== 2 || !Array.isArray(s.rooms)) return null;
     const d = newState(now);
     for (const k of Object.keys(d)) if (s[k] === undefined) s[k] = d[k];
+    for (const k of Object.keys(d.line)) if (s.line[k] === undefined) s.line[k] = d.line[k];
     return s;
   } catch (e) { return null; }
 }
 
+const key = (x, y) => y * GW + x;
+const kx = (k) => k % GW, ky = (k) => Math.floor(k / GW);
+const edgeKey = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+
 export class Sim {
   constructor(state, hooks = {}) {
-    this.s = state; this.h = hooks;
-    this.marbles = []; this.rt = new Map(); this.t = { drip: 0, lore: 0, last: 0 };
-    this.sea = seasonAt(Date.now());
-    this.mods = this.computeMods();
-    this.index(); this.syncWinders();
+    this.s = state; this.h = hooks; this.rt = new Map(); this.quiet = null; this.t = { lore: 0 };
+    this.speed = 0; this.version = 0;
+    this.index();
+  }
+  ev(name, a, b) {
+    if (this.quiet) { const q = this.quiet; if (name === 'postcard') q.postcards.push(a); else if (name === 'depart') q.departed.push(a); else if (name === 'region') q.regions.push(a); else if (name === 'board') q.boarded.push(a); else if (name === 'fork') { /* ignored offline */ } return; }
+    const f = this.h[name]; if (f) f(a, b);
   }
 
-  // ---------- derived data ----------
-  computeMods() {
-    const m = defaultMods();
-    for (const [key, opt] of Object.entries(this.s.choices)) { const b = BOONS[opt]; if (b) b.apply(m); }
-    return m;
-  }
-  len(a, b) { const A = this.s.nodes[a], B = this.s.nodes[b]; return Math.max(0.2, Math.hypot(A.x - B.x, A.y - B.y, A.z - B.z) * 1.08); }
+  // ---------- interior index ----------
   index() {
-    const nodes = this.s.nodes, N = nodes.length;
-    const ch = this.ch = Array.from({ length: N }, () => []);
-    const adj = this.adj = Array.from({ length: N }, () => []);
-    this.alive = 0;
-    for (const n of nodes) {
-      if (n.dead) continue;
-      this.alive++;
-      if (n.p >= 0) { ch[n.p].push(n.id); const l = this.len(n.p, n.id); adj[n.p].push({ to: n.id, len: l }); adj[n.id].push({ to: n.p, len: l }); }
-    }
-    for (const b of this.s.bridges) { const l = this.len(b.a, b.b) * 1.05; adj[b.a].push({ to: b.b, len: l }); adj[b.b].push({ to: b.a, len: l }); }
-    this.tips = nodes.filter((n) => !n.dead && n.id > 0 && ch[n.id].length === 0).map((n) => n.id);
-    const lc = this.leafCount = new Array(N).fill(0);
-    for (let i = N - 1; i >= 1; i--) { if (nodes[i].dead) continue; if (ch[i].length === 0) lc[i] = 1; if (nodes[i].p >= 0) lc[nodes[i].p] += lc[i]; }
-    this.lamps = nodes.filter((n) => !n.dead && n.b === 'lantern');
-    this.lampMul = new Map();
-    for (const t of this.tips) {
-      const T = nodes[t]; let c = 0;
-      for (const l of this.lamps) if (Math.hypot(l.x - T.x, l.y - T.y, l.z - T.z) < 3.6) c++;
-      this.lampMul.set(t, 1 + (0.4 + this.mods.lamp) * Math.min(c, 3));
-    }
-    this.maxY = Math.max(...nodes.filter((n) => !n.dead).map((n) => n.y));
-    this.radius = Math.max(1, ...nodes.filter((n) => !n.dead).map((n) => Math.hypot(n.x, n.z)));
-    this.dirty = true;
-    if (this.h.structure) this.h.structure();
-  }
-  get grown() { return this.alive - 4; }
-  count(type) { return this.s.nodes.filter((n) => !n.dead && n.b === type).length; }
-  baseDrop() { return 2 * this.mods.value * this.sea.cur.valueMul; }
-  nodeAt(id) { return this.s.nodes[id]; }
-
-  edgeCtrl(a, b) {
-    const A = this.s.nodes[a], B = this.s.nodes[b];
-    const mx = (A.x + B.x) / 2, my = (A.y + B.y) / 2, mz = (A.z + B.z) / 2;
-    if (B.p === a) return [mx + B.bx, my + B.by, mz + B.bz];
-    if (A.p === b) return [mx + A.bx, my + A.by, mz + A.bz];
-    return [mx, my - (0.12 * this.len(a, b) + 0.2), mz]; // bridge sags
-  }
-  edgePoint(a, b, t, out = {}) {
-    const A = this.s.nodes[a], B = this.s.nodes[b], c = this.edgeCtrl(a, b), u = 1 - t;
-    out.x = u * u * A.x + 2 * u * t * c[0] + t * t * B.x;
-    out.y = u * u * A.y + 2 * u * t * c[1] + t * t * B.y;
-    out.z = u * u * A.z + 2 * u * t * c[2] + t * t * B.z;
-    return out;
-  }
-  options(id) {
-    const n = this.s.nodes[id], o = [];
-    if (n.p >= 0) o.push(n.p);
-    for (const b of this.s.bridges) if (b.a === id) o.push(b.b);
-    return o;
-  }
-  next(id) {
-    const n = this.s.nodes[id], o = this.options(id);
-    if (o.length <= 1) return o[0];
-    if (n.route === 1) return o[0];
-    if (n.route === 2) return o[1];
-    n.alt = (n.alt + 1) % o.length; return o[n.alt];
-  }
-
-  // ---------- economy ----------
-  growCost(len) { return Math.round(7 * Math.pow(1.085, Math.max(0, this.grown)) * (0.5 + 0.55 * len)); }
-  bridgeCost(a, b) { return Math.round(12 * Math.pow(1.08, Math.max(0, this.grown)) * (0.6 + 0.35 * this.len(a, b))); }
-  buildCost(type) {
-    const d = BUILD[type], n = this.count(type);
-    return { sap: Math.round(d.sap * Math.pow(d.grow, n)), cogs: d.cogs ? Math.round(d.cogs + (d.cogGrow || 0) * n) : 0 };
-  }
-  afford(c) { return this.s.sap >= (c.sap || 0) && this.s.cogs >= (c.cogs || 0); }
-  pay(c) { this.s.sap -= c.sap || 0; this.s.cogs -= c.cogs || 0; }
-
-  grow(parentId, tx, ty, tz) {
-    const P = this.s.nodes[parentId];
-    if (!P || P.dead) return 'No such branch.';
-    if (this.ch[parentId].length >= 3) return 'That branch is full.';
-    if (this.alive >= 520) return 'The tree is as big as this bench can hold for now.';
-    let dx = tx - P.x, dy = ty - P.y, dz = tz - P.z;
-    dy = Math.max(dy, 0.2);
-    let l = Math.hypot(dx, dy, dz);
-    if (l < 0.7) return 'Too short to grow.';
-    if (l > 3.4) { const k = 3.4 / l; dx *= k; dy *= k; dz *= k; l = 3.4; }
-    const x = P.x + dx, y = P.y + dy, z = P.z + dz;
-    for (const n of this.s.nodes) if (!n.dead && n.id !== parentId && Math.hypot(n.x - x, n.y - y, n.z - z) < 0.55) return 'Too close to another branch.';
-    const cost = this.growCost(l);
-    if (!this.afford({ sap: cost })) return 'Not enough sap.';
-    this.pay({ sap: cost });
-    const r = rng(this.s.nodes.length * 2654435761);
-    const id = this.s.nodes.length;
-    const n = mkNode(id, parentId, x, y, z, (r() - 0.5) * 0.5 * l, 0.16 * l, (r() - 0.5) * 0.5 * l);
-    n.born = Date.now(); n.charge = 0;
-    this.s.nodes.push(n);
-    this.index();
-    return n;
-  }
-  previewGrow(parentId, tx, ty, tz) {
-    const P = this.s.nodes[parentId];
-    let dx = tx - P.x, dy = Math.max(ty - P.y, 0.2), dz = tz - P.z;
-    let l = Math.hypot(dx, dy, dz);
-    if (l > 3.4) { const k = 3.4 / l; dx *= k; dy *= k; dz *= k; l = 3.4; }
-    const x = P.x + dx, y = P.y + dy, z = P.z + dz;
-    let err = null;
-    if (l < 0.7) err = 'short';
-    else if (this.ch[parentId].length >= 3) err = 'full';
-    else for (const n of this.s.nodes) if (!n.dead && n.id !== parentId && Math.hypot(n.x - x, n.y - y, n.z - z) < 0.55) { err = 'close'; break; }
-    const cost = this.growCost(l);
-    if (!err && !this.afford({ sap: cost })) err = 'sap';
-    return { x, y, z, len: l, cost, err };
-  }
-  build(id, type) {
-    const n = this.s.nodes[id];
-    if (!n || n.dead || n.id === 0) return 'Cannot build there.';
-    if (n.b) return 'Something is already built here.';
-    const c = this.buildCost(type);
-    if (!this.afford(c)) return 'Not enough sap or cogs.';
-    this.pay(c);
-    n.b = type; n.built = Date.now();
-    if (type === 'chime') n.note = clamp(Math.floor(n.y * 0.9), 0, 14);
-    if (type === 'hut') this.addWinder(id);
-    this.index();
-    return null;
-  }
-  demolish(id) {
-    const n = this.s.nodes[id];
-    if (!n || !n.b) return;
-    const type = n.b; n.b = null;
-    // refund 60% of what the next copy would have cost minus one step
-    const base = BUILD[type], count = this.count(type);
-    const refund = { sap: Math.round(base.sap * Math.pow(base.grow, count) * 0.6), cogs: type === 'hut' ? Math.floor((base.cogs + (base.cogGrow || 0) * count) * 0.6) : 0 };
-    this.s.sap += refund.sap; this.s.cogs += refund.cogs;
-    if (type === 'hut') for (const w of this.s.winders) if (w.hut === id) w.hut = 0;
-    this.index();
-  }
-  canPrune(id) { const n = this.s.nodes[id]; return n && !n.dead && id > 3 && this.ch[id].length === 0; }
-  prune(id) {
-    if (!this.canPrune(id)) return false;
-    const n = this.s.nodes[id];
-    if (n.b) this.demolish(id);
-    const refund = Math.round(this.growCost(this.len(n.p, id) / 1.08) * 0.5);
-    this.s.sap += refund;
-    n.dead = true;
-    this.s.bridges = this.s.bridges.filter((b) => b.a !== id && b.b !== id);
-    for (const w of this.s.winders) { const r = this.rt.get(w.id); if (r) { r.path = []; r.mode = 'idle'; r.node = r.node === id ? n.p : r.node; r.target = -1; } }
-    this.marbles = this.marbles.filter((m) => m.n !== id && m.to !== id);
-    this.index();
-    return true;
-  }
-  bridgeTargets(a) {
-    const A = this.s.nodes[a], out = [];
-    for (const n of this.s.nodes) {
-      if (n.dead || n.id === a || n.id === 0) continue;
-      if (A.y - n.y < 0.3) continue;
-      if (n.id === A.p) continue;
-      if (Math.hypot(A.x - n.x, A.y - n.y, A.z - n.z) > 7.5) continue;
-      if (this.s.bridges.some((b) => b.a === a && b.b === n.id)) continue;
-      out.push(n.id);
-    }
-    return out;
-  }
-  addBridge(a, b) {
-    if (!this.bridgeTargets(a).includes(b)) return 'A rope cannot go there.';
-    if (this.s.bridges.filter((x) => x.a === a).length >= 2) return 'That branch already has two ropes.';
-    const c = this.bridgeCost(a, b);
-    if (!this.afford({ sap: c })) return 'Not enough sap.';
-    this.pay({ sap: c });
-    this.s.bridges.push({ a, b, born: Date.now() });
-    this.index();
-    return null;
-  }
-  removeBridge(a, b) {
-    const i = this.s.bridges.findIndex((x) => x.a === a && x.b === b);
-    if (i < 0) return;
-    this.s.sap += Math.round(this.bridgeCost(a, b) * 0.5);
-    this.s.bridges.splice(i, 1);
-    this.s.nodes[a].route = 0;
-    this.marbles = this.marbles.filter((m) => !(m.n === a && m.to === b));
-    for (const w of this.s.winders) { const r = this.rt.get(w.id); if (r) { r.path = []; r.mode = 'idle'; r.target = -1; if (!this.s.nodes[r.node] || this.s.nodes[r.node].dead) r.node = 0; } }
-    this.index();
-  }
-  cycleRoute(id) {
-    const n = this.s.nodes[id];
-    if (this.options(id).length < 2) return;
-    n.route = (n.route + 1) % 3;
-  }
-
-  // ---------- leaves, sap ----------
-  shake(tipId) {
-    const n = this.s.nodes[tipId];
-    if (!n || n.dead || n.charge < 1 || this.marbles.length > 300) return false;
-    n.charge -= 1;
-    const to = this.next(tipId);
-    if (to === undefined) return false;
-    this.marbles.push({ n: tipId, to, s: 0, v: 0.9, val: this.baseDrop(), id: Math.random() });
-    if (this.h.shake) this.h.shake(tipId);
-    return true;
-  }
-  cap() { return this.mods.cap; }
-
-  // ---------- folk ----------
-  addWinder(hutNode) {
-    const s = this.s, idx = s.nextWinder++;
-    const f = FOLK[idx % FOLK.length];
-    const w = {
-      id: idx, name: idx < FOLK.length ? f.name : `${f.name} ${['II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'][Math.min(8, Math.floor(idx / FOLK.length) - 1)]}`,
-      f: idx % FOLK.length, hut: hutNode, mood: 0, tales: 0, hue: (idx * 47 + 18) % 360, windCd: 0,
-    };
-    s.winders.push(w);
-    this.syncWinders();
-    return w;
-  }
-  folkOf(w) { return FOLK[w.f]; }
-  syncWinders() {
-    for (const w of this.s.winders) {
-      if (!this.rt.has(w.id)) {
-        const home = this.s.nodes[w.hut] && !this.s.nodes[w.hut].dead ? w.hut : 0;
-        const p = this.nodePos(home);
-        this.rt.set(w.id, { node: home, path: [], i: 0, s: 0, mode: 'idle', t: 1 + Math.random() * 2, target: -1, x: p.x, y: p.y, z: p.z, boost: 0, bark: 20 + Math.random() * 40, face: 0 });
+    const s = this.s; this.tile = new Map(); this.roomById = new Map();
+    for (const r of s.rooms) { this.roomById.set(r.id, r); for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) this.tile.set(key(x, y), r.id); }
+    // doors: pick the middle of shared boundaries (two for very long ones)
+    const pairs = new Map();
+    for (const [k, rid] of this.tile) {
+      const x = kx(k), y = ky(k);
+      for (const [nx, ny] of [[x + 1, y], [x, y + 1]]) {
+        if (nx >= GW || ny >= GH) continue;
+        const nk = key(nx, ny), q = this.tile.get(nk);
+        if (q === undefined || q === rid) continue;
+        const pk = rid < q ? `${rid}-${q}` : `${q}-${rid}`;
+        if (!pairs.has(pk)) pairs.set(pk, []);
+        pairs.get(pk).push({ a: k, b: nk, x, y, ox: nx, oy: ny });
       }
     }
-  }
-  nodePos(id) { const n = this.s.nodes[id]; return { x: n.x, y: n.y, z: n.z }; }
-  windKey(wid) {
-    const w = this.s.winders.find((x) => x.id === wid), r = this.rt.get(wid);
-    if (!w || w.windCd > 0) return false;
-    w.windCd = 45; r.boost = 30; this.addMood(w, 6);
-    return true;
-  }
-  addMood(w, v) {
-    const before = w.mood;
-    w.mood = clamp(w.mood + v * this.mods.mood * this.sea.cur.moodMul, 0, 100);
-    const th = [30, 60, 90];
-    while (w.tales < 3 && w.mood >= th[w.tales]) {
-      w.tales++;
-      if (this.h.tale) this.h.tale(w, this.folkOf(w).tales[w.tales - 1]);
+    this.doors = new Set(); this.doorList = [];
+    for (const list of pairs.values()) {
+      list.sort((p, q) => (p.y - q.y) || (p.x - q.x));
+      const picks = list.length <= 4 ? [Math.floor(list.length / 2)] : [Math.floor(list.length * 0.25), Math.floor(list.length * 0.75)];
+      for (const i of picks) { const d = list[i]; this.doors.add(edgeKey(d.a, d.b)); this.doorList.push(d); }
     }
-    return w.mood - before;
+    // walls: every room edge that is not a door; shared edges emitted once
+    this.walls = [];
+    const dirs = [[0, -1, 'n'], [1, 0, 'e'], [0, 1, 's'], [-1, 0, 'w']];
+    for (const [k, rid] of this.tile) {
+      const x = kx(k), y = ky(k);
+      for (const [dx, dy, side] of dirs) {
+        const nx = x + dx, ny = y + dy, nk = nx >= 0 && ny >= 0 && nx < GW && ny < GH ? key(nx, ny) : -1, q = nk >= 0 ? this.tile.get(nk) : undefined;
+        if (q === rid) continue;
+        if (q !== undefined) { if (this.doors.has(edgeKey(k, nk))) continue; if (q < rid) continue; }
+        this.walls.push({ x, y, side });
+      }
+    }
+    this.beds = s.rooms.filter((r) => r.type === 'sleeper').reduce((a, r) => a + Math.floor((r.w * r.h) / 3), 0);
+    this.version++;
+    for (const p of s.passengers) this.snap(p);
+    if (this.h.layout) this.h.layout();
   }
-  path(a, b) {
+  snap(p) {
+    const k = key(Math.floor(p.x), Math.floor(p.y));
+    if (this.tile.has(k)) return;
+    const sl = this.s.rooms.find((r) => r.type === 'sleeper') || this.s.rooms[0];
+    if (sl) { p.x = sl.x + 0.5; p.y = sl.y + 0.5; }
+    const r = this.rt.get(p.id); if (r) { r.state = 'idle'; r.path = []; r.t = 0.5; }
+  }
+  roomAt(x, y) { const id = this.tile.get(key(x, y)); return id === undefined ? null : this.roomById.get(id); }
+  neighbors(k) {
+    const x = kx(k), y = ky(k), rid = this.tile.get(k), out = [];
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, ny = y + dy; if (nx < 0 || ny < 0 || nx >= GW || ny >= GH) continue;
+      const nk = key(nx, ny), q = this.tile.get(nk); if (q === undefined) continue;
+      if (q === rid || this.doors.has(edgeKey(k, nk))) out.push(nk);
+    }
+    return out;
+  }
+  path(ax, ay, bx, by) {
+    const a = key(ax, ay), b = key(bx, by);
+    if (!this.tile.has(a) || !this.tile.has(b)) return null;
     if (a === b) return [a];
-    const nodes = this.s.nodes, N = nodes.length, adj = this.adj;
-    const g = new Float32Array(N).fill(Infinity), prev = new Int32Array(N).fill(-1), done = new Uint8Array(N);
-    const T = nodes[b], hh = (n) => Math.hypot(nodes[n].x - T.x, nodes[n].y - T.y, nodes[n].z - T.z);
-    g[a] = 0; const open = [a];
+    const g = new Map([[a, 0]]), prev = new Map(), open = [a], done = new Set();
+    const h = (k) => Math.abs(kx(k) - bx) + Math.abs(ky(k) - by);
     while (open.length) {
       let bi = 0, bf = Infinity;
-      for (let i = 0; i < open.length; i++) { const f = g[open[i]] + hh(open[i]); if (f < bf) { bf = f; bi = i; } }
+      for (let i = 0; i < open.length; i++) { const f = g.get(open[i]) + h(open[i]); if (f < bf) { bf = f; bi = i; } }
       const cur = open.splice(bi, 1)[0];
       if (cur === b) break;
-      done[cur] = 1;
-      for (const e of adj[cur]) {
-        if (done[e.to]) continue;
-        const ng = g[cur] + e.len;
-        if (ng < g[e.to]) { g[e.to] = ng; prev[e.to] = cur; if (!open.includes(e.to)) open.push(e.to); }
+      done.add(cur);
+      for (const n of this.neighbors(cur)) {
+        if (done.has(n)) continue;
+        const ng = g.get(cur) + 1;
+        if (!g.has(n) || ng < g.get(n)) { g.set(n, ng); prev.set(n, cur); if (!open.includes(n)) open.push(n); }
       }
     }
-    if (prev[b] < 0) return null;
-    const out = [b]; let c = b; while (c !== a) { c = prev[c]; out.push(c); }
+    if (!prev.has(b)) return null;
+    const out = [b]; let c = b; while (c !== a) { c = prev.get(c); out.push(c); }
     return out.reverse();
   }
-  moodFactor(w) { return 0.8 + 0.4 * (w.mood / 100); }
-  nearLamp(id) { const n = this.s.nodes[id]; for (const l of this.lamps) if (Math.hypot(l.x - n.x, l.y - n.y, l.z - n.z) < 3.6) return true; return false; }
 
-  updateWinder(w, dt) {
-    const r = this.rt.get(w.id), nodes = this.s.nodes;
-    if (!nodes[r.node] || nodes[r.node].dead) { r.node = 0; r.path = []; r.mode = 'idle'; }
-    if (w.windCd > 0) w.windCd = Math.max(0, w.windCd - dt);
-    if (r.boost > 0) r.boost -= dt;
-    const speedMul = this.mods.wspeed * this.moodFactor(w) * (r.boost > 0 ? 1.6 : 1);
-    this.addMood(w, dt * (this.nearLamp(w.hut) ? 0.09 : 0.035));
-    r.bark -= dt;
-    if (r.bark <= 0) {
-      r.bark = 45 + Math.random() * 70;
-      const pool = this.sea.cur.id === 'winter' && Math.random() < 0.5 ? WINTER_BARKS : BARKS;
-      if (this.h.bark) this.h.bark(w, pool[Math.floor(Math.random() * pool.length)]);
+  // ---------- building ----------
+  get used() { return this.s.passengers.length; }
+  roomCost(type, w, h) { return Math.round(ROOMS[type].cost * w * h * Math.pow(1.05, Math.max(0, this.s.rooms.length - 3))); }
+  canPlace(type, x, y, w, h) {
+    const d = ROOMS[type], g = this.s.grid;
+    if (!d || !this.s.unlocked.includes(type)) return 'locked';
+    if (d.line) { if (Math.min(w, h) !== 1 || Math.max(w, h) < d.min || Math.max(w, h) > d.max) return 'size'; }
+    else if (w < d.min || h < d.min || w > d.max || h > d.max) return 'size';
+    if (x < g.x0 || y < g.y0 || x + w - 1 > g.x1 || y + h - 1 > g.y1) return 'outside';
+    let touches = false;
+    for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) {
+      if (this.tile.has(key(i, j))) return 'overlap';
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (this.tile.has(key(i + dx, j + dy))) touches = true;
     }
-    if (r.mode === 'idle') {
-      r.t -= dt;
-      if (r.t > 0) return;
-      // choose the fullest unattended leaf
-      let best = -1, bc = 0.99;
-      for (const t of this.tips) {
-        if (nodes[t].charge > bc) {
-          let taken = false;
-          for (const [, o] of this.rt) if (o !== r && o.target === t) { taken = true; break; }
-          if (!taken) { best = t; bc = nodes[t].charge; }
-        }
-      }
-      if (best >= 0) {
-        const p = this.path(r.node, best);
-        if (p) { r.path = p; r.i = 0; r.s = 0; r.mode = 'walk'; r.target = best; return; }
-      }
-      // wander near home
-      const home = nodes[w.hut] && !nodes[w.hut].dead ? w.hut : 0;
-      if (r.node !== home && Math.random() < 0.6) { const p = this.path(r.node, home); if (p) { r.path = p; r.i = 0; r.s = 0; r.mode = 'walk'; r.target = -1; return; } }
-      const H = nodes[home]; const near = nodes.filter((n) => !n.dead && Math.hypot(n.x - H.x, n.y - H.y, n.z - H.z) < 4.5 && n.id !== r.node);
-      if (near.length) { const pick = near[Math.floor(Math.random() * near.length)]; const p = this.path(r.node, pick.id); if (p) { r.path = p; r.i = 0; r.s = 0; r.mode = 'walk'; r.target = -1; return; } }
-      r.t = 2 + Math.random() * 3;
-    } else if (r.mode === 'walk') {
-      if (r.path.length < 2) { r.mode = 'idle'; r.t = 1; return; }
-      const a = r.path[r.i], b = r.path[r.i + 1];
-      if (!nodes[a] || nodes[a].dead || !nodes[b] || nodes[b].dead) { r.mode = 'idle'; r.path = []; r.t = 0.5; return; }
-      const L = this.len(a, b);
-      r.s += (0.95 * speedMul * dt) / L;
-      if (r.s >= 1) {
-        r.s = 0; r.i++; r.node = b;
-        if (r.i >= r.path.length - 1) {
-          r.path = [];
-          if (r.target >= 0 && this.tips.includes(r.target)) { r.mode = 'work'; r.t = 1.3 / speedMul; }
-          else { r.mode = 'idle'; r.t = 2 + Math.random() * 4; r.target = -1; }
-        }
-      }
-      const pt = this.edgePoint(a, b, clamp(r.s, 0, 1)); r.x = pt.x; r.y = pt.y; r.z = pt.z;
-      r.face = Math.atan2(nodes[b].x - nodes[a].x, nodes[b].z - nodes[a].z);
-    } else if (r.mode === 'work') {
-      const p = this.nodePos(r.node); r.x = p.x; r.y = p.y; r.z = p.z;
-      r.t -= dt;
-      if (r.t <= 0) {
-        if (this.shake(r.target)) this.addMood(w, 0.25);
-        r.mode = 'idle'; r.t = 0.4; r.target = -1;
-      }
-    }
-    if (r.mode === 'idle') { const p = this.nodePos(r.node); r.x = p.x; r.y = p.y; r.z = p.z; }
+    if (!touches) return 'apart';
+    if (this.roomCost(type, w, h) > this.s.charm) return 'charm';
+    return null;
+  }
+  build(type, x, y, w, h) {
+    const err = this.canPlace(type, x, y, w, h);
+    if (err) return err;
+    this.s.charm -= this.roomCost(type, w, h);
+    const r = { id: this.s.nextRoom++, type, x, y, w, h, born: Date.now() };
+    this.s.rooms.push(r); this.index(); return r;
+  }
+  demolish(id) {
+    const r = this.roomById.get(id); if (!r) return false;
+    if (this.s.rooms.length <= 2) return false;
+    this.s.charm += Math.round(this.roomCost(r.type, r.w, r.h) * 0.6 / Math.pow(1.05, 0));
+    this.s.rooms = this.s.rooms.filter((q) => q.id !== id);
+    this.index(); return true;
+  }
+  unfoldCost(dir) {
+    const g = this.s.grid, cells = dir === 'n' || dir === 's' ? g.x1 - g.x0 + 1 : g.y1 - g.y0 + 1;
+    return Math.round(10 * cells * Math.pow(1.1, this.s.unfolds));
+  }
+  canUnfold(dir) {
+    const g = this.s.grid;
+    return { n: g.y0 > 0, s: g.y1 < GH - 1, w: g.x0 > 0, e: g.x1 < GW - 1 }[dir];
+  }
+  unfold(dir) {
+    if (!this.canUnfold(dir)) return 'That edge has nothing more to unfold.';
+    const c = this.unfoldCost(dir); if (c > this.s.charm) return 'Not enough Charm.';
+    this.s.charm -= c; this.s.unfolds++;
+    const g = this.s.grid; if (dir === 'n') g.y0--; if (dir === 's') g.y1++; if (dir === 'w') g.x0--; if (dir === 'e') g.x1++;
+    this.lastUnfold = { dir, t: Date.now() }; this.version++; if (this.h.layout) this.h.layout();
+    return null;
   }
 
-  // ---------- tick ----------
+  // ---------- passengers ----------
+  freeBeds() { return this.beds - this.s.passengers.length; }
+  candidate() { return passengerAt(this.s.metCount, this.s.line.seed); }
+  invite() {
+    const L = this.s.line, st = L.pending; if (!st) return 'Nobody is waiting.';
+    if (this.freeBeds() <= 0) return 'No berth free. Build more Sleeper space, or wait for someone to reach their stop.';
+    const c = passengerAt(st.idx, L.seed), s = this.s;
+    const sl = s.rooms.find((r) => r.type === 'sleeper');
+    const p = { id: s.nextPid++, kind: c.kind, idx: c.idx, gt: c.gt, name: c.name, mood: 6, tales: 0, board: s.miles, dest: s.miles + 45 + Math.floor(rng(hash('d' + c.idx + L.seed))() * 90), x: sl.x + 0.5, y: sl.y + 0.5 };
+    s.passengers.push(p); s.metCount = st.idx + 1; L.pending = null;
+    if (c.gift && !s.unlocked.includes(c.gift)) { s.unlocked.push(c.gift); this.ev('unlock', c.gift, c); }
+    this.syncRt(); this.ev('board', p, c); return null;
+  }
+  decline() { const L = this.s.line; if (!L.pending) return; this.s.metCount = L.pending.idx + 1; L.pending = null; }
+  syncRt() { for (const p of this.s.passengers) if (!this.rt.has(p.id)) this.rt.set(p.id, { state: 'idle', path: [], i: 0, t: 1 + Math.random() * 2, room: null, use: 0, face: 0 }); }
+  moodF(p) { return 0.6 + 0.8 * (p.mood / 100); }
+  get charmMul() { return 1 + 0.04 * this.s.keepsakes.length; }
+  addMood(p, v) {
+    p.mood = clamp(p.mood + v, 0, 100);
+    const d = defOf(p), th = [30, 60, 90];
+    while (p.tales < 3 && p.mood >= th[p.tales]) { p.tales++; this.ev('tale', p, d.tales[p.tales - 1]); }
+  }
+  occupancy(rid) { let n = 0; for (const [, r] of this.rt) if (r.room === rid && (r.state === 'use' || r.state === 'walk')) n++; return n; }
+  pickRoom(p) {
+    const d = defOf(p), rooms = this.s.rooms, r = Math.random();
+    const want = r < 0.4 ? HOBBY_ROOM[d.hobby] : r < 0.6 ? 'dining' : r < 0.8 ? 'parlor' : 'sleeper';
+    const order = [want, HOBBY_ROOM[d.hobby], 'dining', 'parlor', 'sleeper'];
+    for (const t of order) {
+      const c = rooms.filter((q) => q.type === t && this.occupancy(q.id) < Math.max(1, Math.floor((q.w * q.h) / 2)));
+      if (c.length) return c[Math.floor(Math.random() * c.length)];
+    }
+    return null;
+  }
+  updateP(p, dt) {
+    const rt = this.rt.get(p.id); if (!rt) return;
+    if (!this.tile.has(key(Math.floor(p.x), Math.floor(p.y)))) this.snap(p);
+    if (rt.state === 'idle') {
+      rt.t -= dt; if (rt.t > 0) return;
+      const room = this.pickRoom(p);
+      if (!room) { rt.t = 3; return; }
+      const tx = room.x + Math.floor(Math.random() * room.w), ty = room.y + Math.floor(Math.random() * room.h);
+      const path = this.path(Math.floor(p.x), Math.floor(p.y), tx, ty);
+      if (!path) { rt.t = 3; return; }
+      rt.path = path; rt.i = 0; rt.room = room.id; rt.state = path.length > 1 ? 'walk' : 'use'; rt.use = 6 + Math.random() * 8; rt.len = path.length;
+    } else if (rt.state === 'walk') {
+      const nk = rt.path[rt.i + 1];
+      if (nk === undefined) { rt.state = 'use'; return; }
+      const tx = kx(nk) + 0.5, ty = ky(nk) + 0.5, dx = tx - p.x, dy = ty - p.y, dist = Math.hypot(dx, dy), step = 1.7 * dt;
+      if (dist > 0.001) rt.face = Math.atan2(dx, dy);
+      if (dist <= step) { p.x = tx; p.y = ty; rt.i++; if (rt.i >= rt.path.length - 1) { rt.state = 'use'; } }
+      else { p.x += (dx / dist) * step; p.y += (dy / dist) * step; }
+    } else if (rt.state === 'use') {
+      rt.use -= dt;
+      const room = this.roomById.get(rt.room), d = defOf(p), fav = room && room.type === HOBBY_ROOM[d.hobby];
+      const walkPenalty = (rt.len || 0) > 16 ? 0.7 : 1;
+      this.s.charm += 0.22 * this.moodF(p) * (fav ? 2 : 1) * this.charmMul * (this.s.line.pending ? 0.5 : 1) * walkPenalty * dt;
+      this.addMood(p, (fav ? 0.5 : 0.15) * dt);
+      if (rt.use <= 0) { rt.state = 'idle'; rt.t = 1 + Math.random() * 2.5; rt.room = rt.room; }
+    }
+  }
+  charmRate() {
+    let sum = 0;
+    for (const p of this.s.passengers) sum += 0.22 * this.moodF(p) * 0.55 * 1.3;
+    return sum * this.charmMul * (this.s.line.pending ? 0.5 : 1);
+  }
+
+  // ---------- the Line ----------
+  speedMul() { return 1 + ((this.s.pressure - 22) / 100) * 2.0; }
+  region() { return regionOf(this.s.line.region); }
+  forkInfo() { const id = this.s.line.region, rg = regionOf(id); return { L: regionOf(id + 'L'), R: regionOf(id + 'R'), at: this.s.line.regionStart + rg.len - 9, end: this.s.line.regionStart + rg.len }; }
+  chooseFork(side) { this.s.line.forkChosen = side; }
+  stoke(q) {
+    const perfect = Math.abs(q - 0.5) < 0.12;
+    this.s.pressure = Math.min(100, this.s.pressure + (perfect ? 16 : 6));
+    this.s.charm += (perfect ? 1.4 : 0.4) * this.charmMul;
+    return perfect ? 'perfect' : 'ok';
+  }
+  postcard(text, region) {
+    const c = { id: this.s.postcards.length, text, region, mile: Math.round(this.s.miles) };
+    this.s.postcards.push(c); if (this.s.postcards.length > 80) this.s.postcards.shift();
+    this.ev('postcard', c);
+  }
+  advance(dm) {
+    const L = this.s.line, s = this.s;
+    let left = dm;
+    let guard = 0;
+    while (left > 1e-9 && !L.pending && guard++ < 400) {
+      const reg = regionOf(L.region), end = L.regionStart + reg.len, forkAt = end - 9;
+      const ev = [[L.nextStop, 'stop'], [L.nextLandmark, 'landmark'], [end, 'region']];
+      if (!L.forkAnnounced) ev.push([forkAt, 'fork']);
+      let dep = null; for (const p of s.passengers) if (!dep || p.dest < dep.dest) dep = p;
+      if (dep) ev.push([dep.dest, 'depart']);
+      ev.sort((a, b) => a[0] - b[0]);
+      const [m, type] = ev[0];
+      const step = Math.min(left, Math.max(0, m - s.miles));
+      s.miles += step; left -= step;
+      if (s.miles < m - 1e-9) break;
+      if (type === 'landmark') {
+        const r = rng(hash(`lm:${L.seed}:${Math.floor(m * 10)}`));
+        this.postcard(`${POSTCARD_OPEN[Math.floor(r() * POSTCARD_OPEN.length)]} ${LANDMARKS[Math.floor(r() * LANDMARKS.length)]} in the ${reg.name}.`, reg.name);
+        L.nextLandmark = m + 4 + r() * 5;
+      } else if (type === 'fork') {
+        L.forkAnnounced = true; this.ev('fork', this.forkInfo());
+      } else if (type === 'region') {
+        const side = L.forkChosen || (rng(hash(`f:${L.seed}:${L.region}`))() < 0.5 ? 'L' : 'R');
+        L.region = L.region + side; L.regionStart = m; L.forkChosen = null; L.forkAnnounced = false;
+        const nr = regionOf(L.region);
+        if (!s.tickets.includes(nr.name)) s.tickets.push(nr.name);
+        this.postcard(`Crossed into the ${nr.name}. The air smells of ${nr.hint}.`, nr.name);
+        this.ev('region', nr);
+      } else if (type === 'depart') {
+        this.depart(dep);
+      } else if (type === 'stop') {
+        const i = L.stopIndex++, r = rng(hash(`s:${L.seed}:${i}`));
+        L.nextStop = m + 6 + r() * 4;
+        const name = stopName(L.seed, i), isPass = i === 0 || r() > 0.3;
+        if (isPass) { L.pending = { idx: s.metCount, name, mile: m }; this.ev('stop', L.pending); }
+        else { const bonus = 8 + Math.round(r() * 10); s.charm += bonus; this.postcard(`A quick whistle-stop at ${name}. The stationmaster handed up a tin of buttons (+${bonus} Charm).`, name); this.ev('whistle', name, bonus); }
+      }
+    }
+    return dm - left;
+  }
+  depart(p) {
+    const s = this.s, d = defOf(p);
+    s.passengers = s.passengers.filter((q) => q !== p); this.rt.delete(p.id);
+    s.keepsakes.push({ who: p.name, name: d.keep.name, line: d.keep.line });
+    this.postcard(`${p.name} stepped off at their stop and left behind ${d.keep.name.toLowerCase()}.`, 'platform');
+    this.ev('depart', { p, keep: d.keep });
+  }
   tick(dt) {
-    const s = this.s, nodes = s.nodes;
-    this.sea = seasonAt(Date.now());
-    const cap = this.mods.cap, chargeBase = 0.33 * this.sea.cur.chargeMul;
-    for (const t of this.tips) {
-      const n = nodes[t];
-      n.charge = Math.min(cap, n.charge + chargeBase * (this.lampMul.get(t) || 1) * dt);
-    }
-    // the tree drips on its own, even with no one tending it
-    this.t.drip += dt;
-    if (this.t.drip >= 10 * this.mods.drip) {
-      this.t.drip = 0;
-      let best = -1, bc = 0.99;
-      for (const t of this.tips) if (nodes[t].charge > bc) { bc = nodes[t].charge; best = t; }
-      if (best >= 0) this.shake(best);
-    }
-    for (const w of s.winders) this.updateWinder(w, dt);
-    // marbles
-    const keep = [];
-    for (const m of this.marbles) {
-      const A = nodes[m.n], B = nodes[m.to];
-      if (!A || !B || A.dead || B.dead) continue;
-      const L = this.len(m.n, m.to), drop = (A.y - B.y) / L;
-      m.v = Math.min(5.5 * this.mods.speed, m.v + 6 * Math.max(0.12, drop) * dt);
-      m.s += (m.v * dt) / L;
-      let gone = false;
-      while (m.s >= 1 && !gone) {
-        const node = nodes[m.to];
-        if (node.b === 'chime') { m.val *= 1 + this.mods.chime; if (this.h.chime) this.h.chime(node, m); }
-        else if (node.b === 'mill') {
-          m.val += 2 * this.mods.value * this.sea.cur.valueMul;
-          if (Math.random() < 0.06 * this.mods.cog * this.sea.cur.cogMul) { s.cogs += 1; if (this.h.cog) this.h.cog(node); }
-          if (this.h.mill) this.h.mill(node, m);
-        }
-        if (node.id === 0) { s.sap += m.val; s.total += m.val; s.drops++; if (this.h.deposit) this.h.deposit(m.val); gone = true; }
-        else { m.n = node.id; m.to = this.next(node.id); m.s -= 1; if (m.to === undefined) gone = true; }
-      }
-      if (!gone) keep.push(m);
-    }
-    this.marbles = keep;
-    this.t.lore += dt;
-    if (this.t.lore > 2) { this.t.lore = 0; this.checkProgress(); }
+    const s = this.s, L = s.line;
+    s.pressure = Math.max(22, s.pressure - 1.5 * dt);
+    this.syncRt();
+    const target = L.pending ? 0 : BASE_SPEED * this.speedMul();
+    this.speed += (target - this.speed) * Math.min(1, dt * (L.pending ? 1.2 : 0.8));
+    if (!L.pending) this.advance(this.speed * dt);
+    for (const p of s.passengers) this.updateP(p, dt);
+    this.t.lore += dt; if (this.t.lore > 2) { this.t.lore = 0; this.checkProgress(); }
   }
-
-  // ---------- progress ----------
-  hollowLevel() { let l = 0, t = 150; while (this.s.total >= t && l < 14) { l++; t *= 2.4; } return l; }
   checkProgress() {
-    const s = this.s;
-    const hl = this.hollowLevel();
-    if (hl > s.hollow) { s.hollow = hl; if (this.h.hollow) this.h.hollow(hl); }
-    for (const e of LORE) if (!s.journal.includes(e.id) && e.test(s, this)) { s.journal.push(e.id); if (this.h.lore) this.h.lore(e); }
-    this.pending = this.pendingChoice();
-    if (this.pending && !this.announced) { this.announced = this.pending.key; if (this.h.choice) this.h.choice(this.pending); }
-  }
-  genChoice(k) {
-    const r = rng(k * 7919 + 13), pool = GENERATED.slice(), a = pool.splice(Math.floor(r() * pool.length), 1)[0], b = pool.splice(Math.floor(r() * pool.length), 1)[0];
-    return { key: 'g' + k, at: GEN_START + GEN_STEP * k, title: 'The tree asks for a gift', body: 'Another ring forms in the trunk. It holds a small wish.', options: [a, b], generated: true };
-  }
-  pendingChoice() {
-    for (const c of CHOICES) { if (!(c.key in this.s.choices)) return this.grown >= c.at ? c : null; }
-    let k = 0; while ('g' + k in this.s.choices) k++;
-    const c = this.genChoice(k);
-    return this.grown >= c.at ? c : null;
-  }
-  choose(key, optionId) {
-    const c = this.pending && this.pending.key === key ? this.pending : null;
-    if (!c || !c.options.includes(optionId)) return false;
-    this.s.choices[key] = optionId;
-    this.mods = this.computeMods();
-    const b = BOONS[optionId];
-    if (b.gift === 'winder') {
-      const w = this.addWinder(1); w.mood = 20;
-    }
-    this.pending = null; this.announced = null;
-    this.index();
-    return true;
+    const s = this.s, ctx = { miles: s.miles, passengers: s.passengers, metCount: s.metCount, unfolds: s.unfolds, keepsakes: s.keepsakes, postcards: s.postcards };
+    for (const e of LORE) if (!s.journal.includes(e.id) && e.test(ctx)) { s.journal.push(e.id); this.ev('lore', e); }
   }
 
-  // ---------- expected value per drop (for HUD and offline) ----------
-  expected() {
-    const nodes = this.s.nodes, order = nodes.filter((n) => !n.dead).sort((a, b) => a.y - b.y);
-    const A = new Map(), B = new Map(), C = new Map();
-    const base = this.baseDrop(), m = this.mods;
-    for (const n of order) {
-      if (n.id === 0) { A.set(0, 1); B.set(0, 0); C.set(0, 0); continue; }
-      let mul = 1, add = 0, cg = 0;
-      if (n.b === 'chime') mul = 1 + m.chime;
-      if (n.b === 'mill') { add = 2 * m.value * this.sea.cur.valueMul; cg = 0.06 * m.cog * this.sea.cur.cogMul; }
-      const opts = this.options(n.id).filter((o) => A.has(o));
-      let sa = 0, sb = 0, sc = 0;
-      for (const o of opts) { sa += A.get(o); sb += B.get(o); sc += C.get(o); }
-      const k = Math.max(1, opts.length);
-      const aa = sa / k, bb = sb / k, cc = sc / k;
-      A.set(n.id, aa * mul); B.set(n.id, aa * add + bb); C.set(n.id, cc + cg);
-    }
-    let v = 0, c = 0, cnt = 0;
-    for (const t of this.tips) {
-      const opts = this.options(t).filter((o) => A.has(o));
-      if (!opts.length) continue;
-      let sv = 0, sc = 0;
-      for (const o of opts) { sv += A.get(o) * base + B.get(o); sc += C.get(o); }
-      v += sv / opts.length; c += sc / opts.length; cnt++;
-    }
-    return cnt ? { value: v / cnt, cogs: c / cnt } : { value: base, cogs: 0 };
-  }
-  idleDropsPerSec() { return 1 / (10 * this.mods.drip) + this.s.winders.length * (1 / (6.5 / (this.mods.wspeed))); }
-  idlePerMinute() { return this.idleDropsPerSec() * this.expected().value * 60; }
-
-  // ---------- offline ----------
+  // ---------- away ----------
   offline(seconds) {
     const s = this.s;
-    const eff = Math.min((seconds <= 7200 ? seconds : 7200 + (seconds - 7200) * 0.4), 28800) * this.mods.offline;
-    const supply = this.tips.length * (this.mods.cap + eff * 0.33 * 0.5);
-    const drops = Math.floor(Math.min(eff * this.idleDropsPerSec(), supply));
-    const ex = this.expected();
-    const sap = drops * ex.value, cogs = Math.floor(drops * ex.cogs + Math.random());
-    s.sap += sap; s.total += sap; s.drops += drops; s.cogs += cogs;
-    for (const t of this.tips) this.s.nodes[t].charge = this.mods.cap;
-    const talesBefore = s.winders.map((w) => w.tales);
-    for (const w of s.winders) this.addMood(w, Math.min(eff, 14400) * 0.03);
-    const lines = [];
-    const pool = s.winders.slice().sort(() => Math.random() - 0.5).slice(0, 3);
-    for (const w of pool) {
-      const tpl = ANECDOTES[Math.floor(Math.random() * ANECDOTES.length)];
-      lines.push(tpl.replace('{name}', w.name).replace('{n}', String(3 + Math.floor(Math.random() * 40))));
+    const eff = Math.min(seconds <= 7200 ? seconds : 7200 + (seconds - 7200) * 0.35, 28800);
+    const rep = { secs: seconds, charm: 0, miles: 0, postcards: [], departed: [], regions: [], boarded: [], waiting: null };
+    const c0 = s.charm, m0 = s.miles;
+    this.syncRt();
+    s.charm += this.charmRate() * eff;
+    for (const p of s.passengers) this.addMood(p, Math.min(eff, 7200) * 0.03);
+    let travel = BASE_SPEED * 1.05 * Math.min(eff, 6 * 3600);
+    this.quiet = rep;
+    let guard = 0;
+    while (travel > 1e-6 && guard++ < 50) {
+      const used = this.advance(travel); travel -= used;
+      if (s.line.pending) {
+        if (s.auto && this.freeBeds() > 0) { if (this.invite() !== null) break; } else break;
+      } else if (used <= 1e-9) break;
     }
-    if (!s.winders.length) lines.push('The tree dripped quietly to itself, one slow drop at a time.');
-    const tales = [];
-    s.winders.forEach((w, i) => { if (w.tales > talesBefore[i]) tales.push(w.name); });
+    this.quiet = null;
+    rep.charm = s.charm - c0; rep.miles = s.miles - m0; rep.waiting = s.line.pending;
+    rep.postcards = rep.postcards.slice(-5);
     this.checkProgress();
-    return { seconds, sap, cogs, drops, lines, tales };
+    return rep;
   }
 }

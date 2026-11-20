@@ -1,9 +1,9 @@
-import { Sim, newState, loadState, fmt, clamp, seasonAt } from './logic.js';
+import { Sim, newState, loadState, fmt, clamp, defOf, passengerAt, regionOf, stopName, GW, GH } from './logic.js';
 import { World } from './world.js';
 import { Audio } from './audio.js';
-import { BUILD, FOLK, LORE, BOONS, PALETTES, SEASONS } from './data.js';
+import { ROOMS, LORE, HINTS, HOBBY_ROOM } from './data.js';
 
-const SAVE_KEY = 'emberwood.save.v1';
+const SAVE_KEY = 'marigold.save.v2';
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
 
@@ -12,364 +12,349 @@ let state = null, fresh = false;
 try { state = loadState(localStorage.getItem(SAVE_KEY)); } catch (e) { state = null; }
 if (!state) { state = newState(); fresh = true; }
 const audio = new Audio(); audio.enabled = state.sound !== false;
-
 const hooks = {};
 const sim = new Sim(state, hooks);
 const world = new World($('gl'), sim);
 window.__game = { sim, world, state };
-hooks.structure = () => { world.treeDirty = true; world.fit(false); if (ui) ui.sheetDirty = true; };
-world.treeDirty = true;
-
 function save() { try { state.last = Date.now(); localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (e) { /* storage may be unavailable */ } }
 addEventListener('visibilitychange', () => { if (document.hidden) save(); });
 addEventListener('pagehide', save);
 setInterval(save, 10000);
+addEventListener('pointerdown', () => audio.resume(), { passive: true });
 
-// ---------- floating text and bubbles ----------
+// ---------- small ui helpers ----------
 const labels = $('labels');
 let floats = 0;
 function floatText(text, x, y, cls = '') {
-  if (floats > 14) return; floats++;
+  if (floats > 12) return; floats++;
   const el = document.createElement('div'); el.className = 'float ' + cls; el.textContent = text; el.style.left = x + 'px'; el.style.top = y + 'px';
   el.addEventListener('animationend', () => { el.remove(); floats--; }); labels.appendChild(el);
 }
-function floatAt(x, y, z, text, cls) { const p = world.project(x, y, z); if (p.ok) floatText(text, p.x + (Math.random() - 0.5) * 16, p.y, cls); }
-const bubbles = [];
-function say(w, text) {
-  for (let i = bubbles.length - 1; i >= 0; i--) if (bubbles[i].w === w) { bubbles[i].el.remove(); bubbles.splice(i, 1); }
-  const el = document.createElement('div'); el.className = 'bubble'; el.innerHTML = `<b>${esc(w.name)}</b>${esc(text)}`; labels.appendChild(el);
-  bubbles.push({ w, el, until: performance.now() + 5200 });
-}
-function toast(html) {
-  const el = document.createElement('div'); el.className = 'toast'; el.innerHTML = html; $('toast').appendChild(el);
-  el.addEventListener('animationend', () => el.remove());
-}
-
-// ---------- sim hooks ----------
-let lastPlip = 0;
-hooks.shake = (tip) => { world.wobble.set(tip, 0.4); audio.shake(); };
-hooks.deposit = (val) => {
-  world.pulse = Math.min(1, world.pulse + 0.5);
-  const now = performance.now(); if (now - lastPlip > 90) { lastPlip = now; audio.plip(val); }
-  floatAt(0, 0.5, 0, '+' + fmt(val));
-  if (state.hint === 0) setHint(1);
-};
-hooks.chime = (node, m) => { audio.note(node.note, 0.5); world.ringChime(node.id, 1); floatAt(node.x, node.y - 0.3, node.z, '♪ x' + (1 + sim.mods.chime).toFixed(2), 'chime'); };
-hooks.mill = (node) => world.spinMill(node.id);
-hooks.cog = (node) => { floatAt(node.x, node.y + 0.2, node.z, '+1 cog', 'cog'); audio.pop(); };
-hooks.bark = (w, text) => say(w, text);
-hooks.tale = (w, text) => { toast(`<b>${esc(w.name)}</b> opened up. A new tale in the Folk list.`); badge('bFolk', true); audio.chord(); };
-hooks.lore = (e) => { if (e.id !== 'bench') { toast(`A memory stirs: <b>${esc(e.title)}</b>`); badge('bBook', true); audio.chord(); } };
-hooks.hollow = () => { toast('A cottage lights up in the Hollow.'); audio.chord(); };
-hooks.choice = (c) => { badge('bBook', true); queueModal(() => choiceModal(c)); };
-
-function badge(which, on) { if (which === 'bBook') $('bookBadge').hidden = !on; else { const b = $('bFolk'); let i = b.querySelector('.badge'); if (!i) { i = document.createElement('i'); i.className = 'badge'; b.appendChild(i); } i.hidden = !on; } }
+function toast(html) { const el = document.createElement('div'); el.className = 'toast'; el.innerHTML = html; $('toast').appendChild(el); el.addEventListener('animationend', () => el.remove()); }
+function badge(id, on) { const b = $(id); let i = b.querySelector('.badge'); if (!i && on) { i = document.createElement('i'); i.className = 'badge'; b.appendChild(i); } if (i) i.hidden = !on; }
 
 // ---------- hints ----------
-const HINTS = [
-  'Tap the glowing leaf to shake out sap. Drag to look around.',
-  'Sap rolls down to the roots. Open <b>Shape</b>, tap a glowing bud, and grow a branch.',
-  'Branches that fork bear more leaves. Try building a <b>Winder Hut</b> so someone tends them for you.',
-  'Your Winders walk the branches on their own. Close the game any time; the tree keeps dripping.',
-];
 let hintTimer = 0;
-function setHint(n) {
-  if (n <= state.hint && n !== 0) return; state.hint = n; showHint();
-}
+function setHint(n) { if (n <= state.hint && n !== 0) return; state.hint = n; showHint(); }
 function showHint() {
-  const el = $('hint'); if (modeHint) return;
-  if (state.hint >= 4) { el.hidden = true; return; }
-  el.innerHTML = HINTS[state.hint]; el.hidden = false; el.classList.remove('action');
-  clearTimeout(hintTimer); if (state.hint === 3) hintTimer = setTimeout(() => { state.hint = 4; showHint(); }, 12000);
+  const el = $('hint'); if (drawing) return;
+  if (state.hint >= HINTS.length) { el.hidden = true; return; }
+  el.innerHTML = HINTS[state.hint]; el.hidden = false; clearTimeout(hintTimer);
+  if (state.hint === 3) hintTimer = setTimeout(() => { if (state.hint === 3) { state.hint = 4; showHint(); } }, 45000);
 }
-let modeHint = false;
-function setModeHint(html, cancel) {
-  const el = $('hint'); modeHint = !!html;
-  if (!html) { showHint(); return; }
-  el.innerHTML = html + (cancel ? ' <button id="hintCancel">Cancel</button>' : ''); el.hidden = false; el.classList.add('action');
-  if (cancel) $('hintCancel').onclick = cancel;
-}
-
-// ---------- modes and selection ----------
-let mode = 'tend', selected = -1, growFrom = -1, growing = false, ui = null;
-function setMode(m) {
-  mode = m; world.setMode(m); $('bTend').setAttribute('aria-pressed', m === 'tend'); $('bShape').setAttribute('aria-pressed', m === 'shape');
-  cancelGrow(); cancelBridge();
-  if (m !== 'shape') { selected = -1; world.select(-1); }
-  ui.sheetDirty = true;
-}
-function cancelGrow() { growFrom = -1; growing = false; world.growFrom = -1; world.hideGhost(); world.controls.enabled = true; if (!world.bridgeOK.size) setModeHint(null); }
-function cancelBridge() { if (world.bridgeFrom >= 0) { world.endBridge(); setModeHint(null); } }
-$('bTend').onclick = () => setMode('tend');
-$('bShape').onclick = () => setMode('shape');
-
-addEventListener('pointerdown', () => audio.resume(), { passive: true });
-// ---------- input ----------
-const canvas = $('gl');
-let ptr = null;
-canvas.addEventListener('pointerdown', (e) => {
-  audio.resume();
-  ptr = { x: e.clientX, y: e.clientY, t: performance.now(), moved: false, id: e.pointerId };
-  if (growFrom >= 0) { growing = true; updateGhost(e); }
-});
-canvas.addEventListener('pointermove', (e) => {
-  if (!ptr || ptr.id !== e.pointerId) return;
-  if (Math.hypot(e.clientX - ptr.x, e.clientY - ptr.y) > 9) ptr.moved = true;
-  if (growing) updateGhost(e);
-});
-canvas.addEventListener('pointerup', (e) => {
-  if (!ptr || ptr.id !== e.pointerId) return;
-  const p = ptr; ptr = null;
-  if (growing) { commitGrow(e); return; }
-  if (!p.moved && performance.now() - p.t < 450) tap(e.clientX, e.clientY);
-});
-canvas.addEventListener('pointercancel', () => { ptr = null; if (growing) { world.hideGhost(); growing = false; } });
-let ghostPv = null;
-function updateGhost(e) { const hit = world.ghostPoint(e.clientX, e.clientY, growFrom); if (!hit) return; ghostPv = world.showGhost(growFrom, hit); }
-function commitGrow(e) {
-  growing = false; const parent = growFrom;
-  if (!ghostPv) { world.hideGhost(); return; }
-  const pv = ghostPv; ghostPv = null;
-  if (pv.err) {
-    world.hideGhost();
-    toast({ short: 'Drag a little further to make a branch.', full: 'That branch is full.', close: 'Too close to another branch.', sap: `A branch that long costs <b>${fmt(pv.cost)}</b> sap.` }[pv.err]);
-    return;
-  }
-  const res = sim.grow(parent, pv.x, pv.y, pv.z);
-  world.hideGhost();
-  if (typeof res === 'string') { toast(res); return; }
-  audio.grow(); if (navigator.vibrate) navigator.vibrate(12);
-  setHint(2); cancelGrow(); selected = res.id; world.select(selected); ui.sheetDirty = true;
-}
-function nearest(list, x, y, max) {
-  let best = null, bd = max;
-  for (const it of list) { if (!it.p.ok) continue; const d = Math.hypot(it.p.x - x, it.p.y - y); if (d < bd) { bd = d; best = it; } }
-  return best;
-}
-function tap(x, y) {
-  const ws = world.winderScale();
-  const winders = sim.s.winders.map((w) => { const r = sim.rt.get(w.id); return { w, p: world.project(r.x, r.y + 0.2 * ws, r.z) }; });
-  if (mode === 'shape' && world.bridgeFrom < 0) {
-    const allN = sim.s.nodes.filter((n) => !n.dead).map((n) => ({ id: n.id, p: world.project(n.x, n.y, n.z) }));
-    const hn = nearest(allN, x, y, 22);
-    if (hn) { selected = hn.id; world.select(selected); ui.sheetDirty = true; return; }
-  }
-  const wh = nearest(winders, x, y, 34);
-  if (wh) { winderModal(wh.w); return; }
-  if (world.bridgeFrom >= 0) {
-    const cand = [...world.bridgeOK].map((id) => { const n = sim.s.nodes[id]; return { id, p: world.project(n.x, n.y, n.z) }; });
-    const h = nearest(cand, x, y, 40);
-    if (h) {
-      const res = sim.addBridge(world.bridgeFrom, h.id);
-      if (res) toast(res); else { audio.grow(); cancelBridge(); ui.sheetDirty = true; }
-    }
-    return;
-  }
-  if (mode === 'tend') {
-    const tips = sim.tips.map((t) => { const n = sim.s.nodes[t]; return { t, p: world.project(n.x, n.y + 0.3, n.z) }; });
-    const h = nearest(tips, x, y, 46);
-    if (h) {
-      if (sim.shake(h.t)) { if (navigator.vibrate) navigator.vibrate(8); } else { world.wobble.set(h.t, 0.15); floatText('still filling…', h.p.x, h.p.y - 10, 'cog'); }
-    }
-  } else {
-    const all = sim.s.nodes.filter((n) => !n.dead).map((n) => ({ id: n.id, p: world.project(n.x, n.y, n.z) }));
-    const h = nearest(all, x, y, 32);
-    selected = h ? h.id : -1; world.select(selected); ui.sheetDirty = true;
-  }
-}
-
-// ---------- the shape sheet ----------
-const sheet = $('sheet');
-function costTag(c) { const ok = sim.afford(c); return `<span class="cost ${ok ? '' : 'no'}">${c.sap ? fmt(c.sap) + ' sap' : ''}${c.sap && c.cogs ? ' + ' : ''}${c.cogs ? c.cogs + ' cogs' : ''}</span>`; }
-function nodeTitle(n) {
-  if (n.id === 0) return 'The Roots';
-  if (sim.tips.includes(n.id)) return 'Branch tip';
-  if (n.id <= 3) return 'The trunk';
-  return 'Branch joint';
-}
-let sheetSig = '';
-function renderSheet(force) {
-  const n = selected >= 0 ? sim.s.nodes[selected] : null;
-  if (mode !== 'shape' || !n || n.dead || growFrom >= 0 || world.bridgeFrom >= 0) { sheet.hidden = true; sheetSig = ''; return; }
-  const afford = [sim.growCost(1.6), ...Object.keys(BUILD).map((t) => sim.buildCost(t))].map((c) => sim.afford(c.sap !== undefined ? c : { sap: c }) ? 1 : 0).join('');
-  const sig = [selected, n.b, n.route, sim.s.bridges.length, sim.alive, afford].join('|');
-  if (!force && sig === sheetSig) return; sheetSig = sig; sheet.hidden = false;
-  let h = `<h3>${nodeTitle(n)}<small>height ${n.y.toFixed(1)} · ${n.b ? BUILD[n.b].name : 'free'}</small></h3>`;
-  if (n.id === 0) {
-    h += `<div style="color:var(--muted);font-size:13px">All sap ends up here. The Hollow has <b style="color:var(--amber)">${state.hollow}</b> lit cottages. Raise your total sap to light more.</div><div class="row2"><button class="btn ghost sm" data-a="close">Close</button></div>`;
-    sheet.innerHTML = h; return;
-  }
-  const kids = sim.ch[n.id].length, gc = { sap: sim.growCost(1.6) };
-  h += '<div class="grid">';
-  h += `<button class="act primary" data-a="grow" ${kids >= 3 ? 'disabled' : ''}><b>Grow a branch</b><span class="cost">from ${fmt(gc.sap)} sap</span><small>${kids >= 3 ? 'This joint is full.' : 'Drag to choose where it reaches.'}</small></button>`;
-  const targets = sim.bridgeTargets(n.id);
-  if (targets.length && sim.s.bridges.filter((b) => b.a === n.id).length < 2) {
-    const near = Math.min(...targets.map((t) => sim.bridgeCost(n.id, t)));
-    h += `<button class="act" data-a="bridge"><b>Run a rope</b><span class="cost ${sim.s.sap >= near ? '' : 'no'}">from ${fmt(near)} sap</span><small>Send sap, and Winders, down a new route.</small></button>`;
-  }
-  if (sim.options(n.id).length >= 2) {
-    h += `<button class="act" data-a="route"><b>Sap route</b><span class="cost">${['Alternate', 'Branch only', 'Rope only'][n.route]}</span><small>Tap to change where drops go.</small></button>`;
-  }
-  for (const b of sim.s.bridges.filter((x) => x.a === n.id)) h += `<button class="act" data-a="rmbridge" data-b="${b.b}"><b>Cut a rope</b><span class="cost">refund ${fmt(Math.round(sim.bridgeCost(b.a, b.b) * 0.5))}</span><small>Down to joint at height ${sim.s.nodes[b.b].y.toFixed(1)}.</small></button>`;
-  if (sim.canPrune(n.id)) h += `<button class="act" data-a="prune"><b>Prune this tip</b><span class="cost">refund ${fmt(Math.round(sim.growCost(sim.len(n.p, n.id) / 1.08) * 0.5))}</span><small>The leaf folds back into the tree.</small></button>`;
-  h += '</div>';
-  if (n.b) {
-    h += `<div class="grid"><div class="act" style="cursor:default"><b>${BUILD[n.b].name}</b><small>${BUILD[n.b].blurb}</small></div><button class="act" data-a="demolish"><b>Take it down</b><small>Get most of the cost back.</small></button></div>`;
-  } else {
-    h += '<div class="grid">';
-    for (const t of Object.keys(BUILD)) {
-      const c = sim.buildCost(t), ok = sim.afford(c);
-      h += `<button class="act" data-a="build" data-t="${t}" ${ok ? '' : 'disabled'}><b>${BUILD[t].name}</b>${costTag(c)}<small>${BUILD[t].blurb}</small></button>`;
-    }
-    h += '</div>';
-  }
-  h += '<div class="row2"><button class="btn ghost sm" data-a="close">Close</button></div>';
-  sheet.innerHTML = h;
-}
-sheet.addEventListener('click', (e) => {
-  const b = e.target.closest('[data-a]'); if (!b || b.disabled) return;
-  const a = b.dataset.a, n = sim.s.nodes[selected];
-  audio.resume();
-  if (a === 'close') { selected = -1; world.select(-1); sheet.hidden = true; return; }
-  if (!n) return;
-  if (a === 'grow') { growFrom = selected; world.growFrom = selected; world.controls.enabled = false; setModeHint('Drag to shape the new branch. Release to grow it.', cancelGrow); sheet.hidden = true; return; }
-  if (a === 'bridge') { world.beginBridge(selected); setModeHint('Tap a glowing joint lower down to run a rope to it.', () => { cancelBridge(); ui.sheetDirty = true; }); sheet.hidden = true; return; }
-  if (a === 'route') { sim.cycleRoute(selected); }
-  if (a === 'rmbridge') { sim.removeBridge(selected, +b.dataset.b); }
-  if (a === 'prune') { sim.prune(selected); selected = -1; world.select(-1); }
-  if (a === 'demolish') { sim.demolish(selected); }
-  if (a === 'build') {
-    const t = b.dataset.t, res = sim.build(selected, t);
-    if (res) toast(res); else { audio.grow(); setHint(3); if (t === 'hut') toast('A Winder moves in. Tap them to say hello.'); }
-  }
-  ui.sheetDirty = true;
-});
 
 // ---------- modals ----------
 const modal = $('modal'); let modalOpen = false; const modalQ = [];
-function openModal(html, onClose) {
-  modal.innerHTML = `<div class="card">${html}</div>`; modal.hidden = false; modalOpen = true; modal._onClose = onClose;
-}
+function openModal(html, onClose) { modal.innerHTML = `<div class="card">${html}</div>`; modal.hidden = false; modalOpen = true; modal._onClose = onClose; sheetHide(); }
 function closeModal() { modal.hidden = true; modalOpen = false; const f = modal._onClose; modal._onClose = null; if (f) f(); const next = modalQ.shift(); if (next) next(); }
 function queueModal(fn) { if (modalOpen) modalQ.push(fn); else fn(); }
 modal.addEventListener('click', (e) => { if (e.target === modal && !modal.querySelector('[data-nodismiss]')) closeModal(); });
 
-function introModal() {
-  openModal(`<div class="eyebrow">Emberwood</div><h2>A seed fell through the cracks of a giant's workbench.</h2>
-  <p>It is dark between a spool and a screw. The wood is warm, the ceiling is very far away, and something enormous is breathing slowly above you.</p>
-  <p>The seed has begun to glow. Clockwork folk, left behind long ago, are waking in its light. Grow the tree. Look after them. Nothing here ever needs rushing.</p>
-  <div class="row2"><button class="btn" id="begin">Begin</button></div>`, () => { setHint(0); });
-  $('begin').onclick = closeModal;
+// ---------- sim hooks ----------
+hooks.layout = () => { sheetDirty = true; };
+hooks.stop = (st) => {
+  toast(`The Marigold slows into <b>${esc(st.name)}</b>.`); audio.whistle(); platformDirty = true;
+  setTimeout(() => { if (state.line.pending && !modalOpen && view === 'line') stopModal(); }, 1600);
+};
+hooks.whistle = (name, bonus) => { toast(`Whistle-stop at <b>${esc(name)}</b>. +${bonus} Charm.`); audio.pop(); };
+hooks.postcard = (c) => { toast(`<i>${esc(c.text)}</i>`); badge('bBook', true); };
+hooks.region = (r) => { toast(`Into the <b>${esc(r.name)}</b>.`); audio.chord(); forkDirty = true; };
+hooks.fork = () => { forkDirty = true; toast('A <b>fork</b> in the Line is coming up. Choose a way.'); audio.whistle(); };
+hooks.board = (p, c) => { toast(`<b>${esc(p.name)}</b> boards. ${esc(c.trait)}.`); audio.chord(); setHint(2); platformDirty = true; };
+hooks.unlock = (type) => toast(`<b>${esc(ROOMS[type].name)}</b> unlocked. You can build one now.`);
+hooks.tale = (p, text) => { toast(`<b>${esc(p.name)}</b> opened up. A new tale is in People.`); badge('bPeople', true); audio.note(9, 0.5); };
+hooks.depart = ({ p, keep }) => { toast(`<b>${esc(p.name)}</b> steps off at their stop and leaves <b>${esc(keep.name)}</b>.`); audio.chord(); };
+hooks.lore = (e) => { if (e.id !== 'start') { toast(`A memory stirs: <b>${esc(e.title)}</b>`); badge('bBook', true); } };
+
+// ---------- view switching ----------
+let view = 'line', platformDirty = true, forkDirty = true, sheetDirty = true, sheetMode = null, drawing = null, selRoom = null;
+function setView(v) {
+  if (v === view) return;
+  cancelDraw(); selRoom = null; sheetMode = null; world.inside.setSelected(null);
+  const fade = $('fade'); fade.style.opacity = 1;
+  setTimeout(() => {
+    view = v; world.setView(v);
+    $('bLine').setAttribute('aria-pressed', v === 'line'); $('bInside').setAttribute('aria-pressed', v === 'inside');
+    $('stoke').hidden = v !== 'line'; $('inbar').hidden = v !== 'inside'; sheetHide(); platformDirty = forkDirty = true;
+    if (v === 'inside') { setHint(3); showHint(); }
+    fade.style.opacity = 0;
+  }, 200);
 }
-function awayModal(rep) {
-  const mins = Math.round(rep.seconds / 60), t = mins >= 120 ? Math.round(mins / 60) + ' hours' : mins + ' minutes';
-  openModal(`<div class="eyebrow">Welcome back</div><h2>While you were away <em>${t}</em></h2>
-  <div class="stats"><div><b>+${fmt(rep.sap)}</b><small>sap reached the roots</small></div>${rep.cogs ? `<div><b>+${rep.cogs}</b><small>cogs shaken loose</small></div>` : ''}</div>
-  <ul class="tales">${rep.lines.map((l) => `<li>${esc(l)}</li>`).join('')}${rep.tales.length ? `<li>${rep.tales.map(esc).join(' and ')} opened up while you were gone. Check the Folk list.</li>` : ''}</ul>
-  <div class="row2"><button class="btn" id="ok">Back to the tree</button></div>`);
-  $('ok').onclick = closeModal;
+$('bLine').onclick = () => { if (!modalOpen) setView('line'); };
+$('bInside').onclick = () => { if (!modalOpen) setView('inside'); };
+
+// ---------- stoke ----------
+let stokeT = 0, needleQ = 0.5;
+$('stokeBtn').addEventListener('pointerdown', (e) => {
+  e.preventDefault(); audio.resume();
+  const res = sim.stoke(needleQ), r = $('stokeBtn').getBoundingClientRect();
+  audio.coal(res === 'perfect'); if (navigator.vibrate) navigator.vibrate(res === 'perfect' ? 18 : 8);
+  floatText(res === 'perfect' ? 'Perfect!' : '+steam', r.left + r.width * needleQ, r.top - 6, res === 'perfect' ? 'perfect' : '');
+  if (state.hint === 0) setHint(1);
+});
+
+// ---------- the fork banner and platform button ----------
+function renderFork() {
+  const L = state.line, el = $('fork'), info = sim.forkInfo();
+  if (view !== 'line' || !L.forkAnnounced || state.miles >= info.end) { el.hidden = true; return; }
+  const c = L.forkChosen;
+  el.hidden = false;
+  el.innerHTML = `<div class="cap">${c ? 'Switch set. You can still change your mind.' : 'A fork in the Line. Choose a way, or the Line will decide.'}</div><div class="two">` +
+    ['L', 'R'].map((s) => `<button class="fk" data-s="${s}" aria-pressed="${c === s}"><b>${s === 'L' ? '← ' : ''}${esc(info[s].name)}${s === 'R' ? ' →' : ''}</b><small>${esc(info[s].hint)}</small></button>`).join('') + '</div>';
 }
-function choiceModal(c) {
-  const key = c.key;
-  openModal(`<div class="eyebrow">A fork in the wood</div><h2>${esc(c.title)}</h2><p>${esc(c.body)} This choice is permanent.</p>
-  <div class="choice">${c.options.map((o) => `<button class="act" data-o="${o}"><b>${esc(BOONS[o].name)}</b><small>${esc(BOONS[o].desc)}</small></button>`).join('')}</div>
-  <div class="row2"><button class="btn ghost sm" id="later">Decide later</button></div>`);
-  modal.querySelectorAll('[data-o]').forEach((b) => { b.onclick = () => { if (sim.choose(key, b.dataset.o)) { audio.chord(); toast(`<b>${esc(BOONS[b.dataset.o].name)}</b>: ${esc(BOONS[b.dataset.o].desc)}`); badge('bBook', false); closeModal(); } }; });
+$('fork').addEventListener('click', (e) => { const b = e.target.closest('[data-s]'); if (!b) return; sim.chooseFork(b.dataset.s); audio.grow(); renderFork(); });
+function renderPlatform() {
+  const st = state.line.pending, b = $('platform');
+  b.hidden = !st || modalOpen || !!drawing;
+  if (st) b.textContent = `Someone is waiting at ${st.name}`;
+}
+$('platform').onclick = () => { if (!modalOpen) stopModal(); };
+
+// ---------- the stop: meeting a passenger ----------
+function stopModal() {
+  const st = state.line.pending; if (!st) return;
+  const c = passengerAt(st.idx, state.line.seed), free = sim.freeBeds();
+  const gift = c.gift && !state.unlocked.includes(c.gift) ? `Brings the know-how for a <b>${esc(ROOMS[c.gift].name)}</b>.` : c.gift ? `Already knows a craft you have: ${esc(ROOMS[c.gift].name)}.` : '';
+  openModal(`<div class="eyebrow">Platform · ${esc(st.name)}</div><h2>${esc(c.name)}</h2>
+  <div class="chips"><span class="chip">${esc(c.trait)}</span>${c.hobby ? `<span class="chip">likes: ${esc(c.hobby === 'chat' ? 'good company' : ROOMS[HOBBY_ROOM[c.hobby]].name)}</span>` : ''}</div>
+  <div class="quote">${esc(c.line)}</div>
+  <p>${gift} Berths free: <b>${free}</b> of ${sim.beds}.</p>
+  <div class="row2"><button class="btn" id="inv" ${free <= 0 ? 'disabled' : ''}>Invite aboard</button><button class="btn ghost" id="wave">Wave goodbye</button><button class="btn ghost" id="later">Not yet</button></div>
+  ${free <= 0 ? '<p style="color:var(--bad);font-size:13px">No berth is free. Build more Sleeper space inside, then come back to the platform.</p>' : ''}`, () => { platformDirty = true; });
+  $('inv').onclick = () => { const r = sim.invite(); if (r) toast(esc(r)); else { audio.chord(); closeModal(); } };
+  $('wave').onclick = () => { sim.decline(); toast('You wave from the window until they are small.'); closeModal(); };
   $('later').onclick = closeModal;
 }
-function moodBar(w) { return `<div class="bar"><i style="width:${w.mood.toFixed(0)}%"></i></div>`; }
-function folkModal() {
-  const ws = sim.s.winders;
-  badge('bFolk', false);
-  openModal(`<div class="eyebrow">Folk</div><h2>${ws.length ? 'The Winders' : 'No one lives here yet'}</h2>
-  ${ws.length ? `<div class="list">${ws.map((w) => `<button class="item" data-w="${w.id}"><b>${esc(w.name)}</b><small>${esc(sim.folkOf(w).trait)} · ${w.tales}/3 tales</small>${moodBar(w)}</button>`).join('')}</div>` : '<p>Build a <b>Winder Hut</b> on a branch in Shape mode, and the first Winder will move in.</p>'}
+
+// ---------- people ----------
+function moodBar(p) { return `<div class="bar"><i style="width:${p.mood.toFixed(0)}%"></i></div>`; }
+function peopleModal() {
+  badge('bPeople', false);
+  const ps = state.passengers;
+  openModal(`<div class="eyebrow">People</div><h2>${ps.length ? 'Aboard the Marigold' : 'An empty train'}</h2>
+  ${ps.length ? `<div class="list">${ps.map((p) => { const d = defOf(p); return `<button class="item" data-p="${p.id}"><b>${esc(p.name)}</b><small>${esc(d.trait)} · ${p.tales}/3 tales · off in ~${Math.max(1, Math.round(p.dest - state.miles))} mi</small>${moodBar(p)}</button>`; }).join('')}</div>` : '<p>Stop at a station, and invite someone aboard. They bring their stories and their own know-how.</p>'}
+  <p style="color:var(--muted);font-size:13px">Free berths: ${sim.freeBeds()} of ${sim.beds}.</p>
   <div class="row2"><button class="btn ghost" id="x">Close</button></div>`);
-  modal.querySelectorAll('[data-w]').forEach((b) => { b.onclick = () => winderModal(sim.s.winders.find((w) => w.id === +b.dataset.w)); });
+  modal.querySelectorAll('[data-p]').forEach((b) => { b.onclick = () => passengerModal(state.passengers.find((p) => p.id === +b.dataset.p)); });
   $('x').onclick = closeModal;
 }
-function winderModal(w) {
-  const f = sim.folkOf(w), r = sim.rt.get(w.id);
-  badge('bFolk', false);
-  openModal(`<div class="eyebrow">${esc(f.trait)}</div><h2>${esc(w.name)}</h2>
-  <div><small style="color:var(--muted)">Fondness</small>${moodBar(w)}</div>
-  <ul class="tales">${f.tales.map((t, i) => `<li class="${i < w.tales ? '' : 'locked'}">${i < w.tales ? esc(t) : 'A tale they have not told yet. They open up the longer they live in the light.'}</li>`).join('')}</ul>
-  <div class="row2"><button class="btn" id="wind" ${w.windCd > 0 ? 'disabled' : ''}>${w.windCd > 0 ? 'Resting…' : 'Wind their key'}</button><button class="btn ghost" id="x">Close</button></div>
-  <div><small style="color:var(--muted)">Rename</small><input type="text" id="nm" maxlength="14" value="${esc(w.name)}"></div>`);
-  $('wind').onclick = () => { if (sim.windKey(w.id)) { audio.chord(); toast(`<b>${esc(w.name)}</b> is wound up and working twice as hard for a while.`); } closeModal(); };
-  $('x').onclick = closeModal;
-  $('nm').onchange = (e) => { const v = e.target.value.trim().slice(0, 14); if (v) w.name = v; };
+function passengerModal(p) {
+  if (!p) return; const d = defOf(p), room = sim.rt.get(p.id);
+  openModal(`<div class="eyebrow">${esc(d.trait)}</div><h2>${esc(p.name)}</h2>
+  <div><small style="color:var(--muted)">Fondness for the train</small>${moodBar(p)}</div>
+  <p style="color:var(--muted)">Getting off in about <b style="color:var(--gold)">${Math.max(1, Math.round(p.dest - state.miles))} miles</b>. Likes ${esc(d.hobby === 'chat' ? 'good company' : ROOMS[HOBBY_ROOM[d.hobby]].name)}.</p>
+  <ul class="tales">${d.tales.map((t, i) => `<li class="${i < p.tales ? '' : 'locked'}">${i < p.tales ? esc(t) : 'A tale they have not told yet. It comes when they feel at home.'}</li>`).join('')}</ul>
+  <div class="row2"><button class="btn" id="find">Find them inside</button><button class="btn ghost" id="x">Close</button></div>
+  <div><small style="color:var(--muted)">Rename</small><input type="text" id="nm" maxlength="22" value="${esc(p.name)}"></div>`);
+  $('x').onclick = closeModal; $('nm').onchange = (e) => { const v = e.target.value.trim().slice(0, 22); if (v) p.name = v; };
+  $('find').onclick = () => { closeModal(); const go = () => { const c = world.inside.controls; c.target.set(p.x, 0, p.y); world.inside.camera.position.set(p.x, 9, p.y + 9); }; if (view !== 'inside') { setView('inside'); setTimeout(go, 260); } else go(); };
 }
+
+// ---------- journal ----------
 function journalModal() {
   badge('bBook', false);
-  const pend = sim.pending, got = LORE.filter((e) => state.journal.includes(e.id)), rings = Object.entries(state.choices);
-  openModal(`<div class="eyebrow">Journal</div><h2>${esc(state.treeName || 'The Emberwood')}</h2>
-  <div class="stats"><div><b>${fmt(state.total)}</b><small>sap gathered, ever</small></div><div><b>${sim.grown}</b><small>branches grown</small></div><div><b>${state.winders.length}</b><small>Winders</small></div></div>
-  ${pend ? `<button class="act primary" id="pend"><b>The tree is waiting for a choice</b><small>${esc(pend.title)}</small></button>` : ''}
-  <div class="eyebrow">Memories</div><ul class="tales">${got.map((e) => `<li><b>${esc(e.title)}.</b> ${esc(e.text)}</li>`).join('')}${got.length < LORE.length ? `<li class="locked">${LORE.length - got.length} more memories are still asleep in the wood.</li>` : ''}</ul>
-  ${rings.length ? `<div class="eyebrow">Rings in the trunk</div><ul class="tales">${rings.map(([k, o]) => `<li><b>${esc(BOONS[o].name)}.</b> ${esc(BOONS[o].desc)}</li>`).join('')}</ul>` : ''}
+  const got = LORE.filter((e) => state.journal.includes(e.id));
+  openModal(`<div class="eyebrow">Conductor's Journal</div><h2>${esc(state.name || 'The Marigold')}</h2>
+  <div class="stats"><div><b>${fmt(state.miles)}</b><small>miles travelled</small></div><div><b>${state.tickets.length}</b><small>regions punched</small></div><div><b>${state.keepsakes.length}</b><small>keepsakes</small></div></div>
+  ${state.tickets.length ? `<div class="eyebrow">Ticket punches</div><div class="chips">${state.tickets.map((t) => `<span class="chip">${esc(t)}</span>`).join('')}</div>` : ''}
+  <div class="eyebrow">Memories</div><ul class="tales">${got.map((e) => `<li><b>${esc(e.title)}.</b> ${esc(e.text)}</li>`).join('')}${got.length < LORE.length ? `<li class="locked">${LORE.length - got.length} memories are still waiting somewhere on the Line.</li>` : ''}</ul>
+  ${state.keepsakes.length ? `<div class="eyebrow">Keepsakes left behind</div><ul class="tales">${state.keepsakes.map((k) => `<li><b>${esc(k.name)}</b>, from ${esc(k.who)}. ${esc(k.line)}</li>`).join('')}</ul>` : ''}
+  <div class="eyebrow">Postcards</div><div class="pcs">${state.postcards.length ? state.postcards.slice().reverse().slice(0, 30).map((c) => `<div class="card-pc">${esc(c.text)}<small>Mile ${c.mile} · ${esc(c.region)}</small></div>`).join('') : '<p style="color:var(--muted)">Postcards turn up as the Line rolls by.</p>'}</div>
   <div class="row2"><button class="btn ghost" id="x">Close</button></div>`);
-  $('x').onclick = closeModal; if (pend) $('pend').onclick = () => { closeModal(); queueModal(() => choiceModal(pend)); };
+  $('x').onclick = closeModal;
 }
 function menuModal() {
-  openModal(`<div class="eyebrow">Settings</div><h2>Emberwood</h2>
-  <div class="row2"><button class="btn ghost" id="snd">Sound: ${audio.enabled ? 'on' : 'off'}</button><button class="btn ghost" id="rc">Recentre view</button></div>
-  <div><small style="color:var(--muted)">Leaf colour</small><div class="swatches" style="margin-top:6px">${Object.entries(PALETTES).map(([k, p]) => `<button class="sw" data-p="${k}" aria-label="${p.name}" aria-pressed="${state.palette === k}" style="background:${p.col ? `rgb(${p.col.map((c) => Math.round(c * 255)).join(',')})` : 'conic-gradient(#8fff9c,#ff8a2a,#ffc23a,#9fd8ff,#8fff9c)'}"></button>`).join('')}</div></div>
-  <div><small style="color:var(--muted)">Name your tree</small><input type="text" id="tn" maxlength="24" value="${esc(state.treeName)}" placeholder="The Emberwood"></div>
+  openModal(`<div class="eyebrow">Settings</div><h2>The Marigold Line</h2>
+  <div class="row2"><button class="btn ghost" id="snd">Sound: ${audio.enabled ? 'on' : 'off'}</button><button class="btn ghost" id="rc">Recentre the view</button></div>
+  <div class="row2"><button class="btn ghost" id="auto">While I'm away, welcome travellers: ${state.auto ? 'yes' : 'no'}</button></div>
+  <div><small style="color:var(--muted)">Name your train</small><input type="text" id="tn" maxlength="24" value="${esc(state.name)}" placeholder="The Marigold"></div>
   <div class="row2"><button class="btn ghost sm" id="exp">Copy save code</button><button class="btn ghost sm" id="imp">Load save code</button><button class="btn ghost sm" id="rst">Start over</button></div>
-  <div id="io"></div>
-  <div class="row2"><button class="btn" id="x">Done</button></div>`);
+  <div id="io"></div><div class="row2"><button class="btn" id="x">Done</button></div>`);
   $('x').onclick = closeModal;
   $('snd').onclick = (e) => { audio.enabled = !audio.enabled; state.sound = audio.enabled; audio.apply(); e.target.textContent = 'Sound: ' + (audio.enabled ? 'on' : 'off'); };
-  $('rc').onclick = () => { world.fit(true); closeModal(); };
-  modal.querySelectorAll('[data-p]').forEach((b) => b.onclick = () => { state.palette = b.dataset.p; world.recolorFoliage(); modal.querySelectorAll('[data-p]').forEach((o) => o.setAttribute('aria-pressed', o === b)); });
-  $('tn').onchange = (e) => { state.treeName = e.target.value.trim().slice(0, 24); };
+  $('rc').onclick = () => { world.line.recentre(world.aspect); world.inside.fit(world.aspect); closeModal(); };
+  $('auto').onclick = (e) => { state.auto = !state.auto; e.target.textContent = `While I'm away, welcome travellers: ${state.auto ? 'yes' : 'no'}`; };
+  $('tn').onchange = (e) => { state.name = e.target.value.trim().slice(0, 24); };
   $('exp').onclick = async () => { save(); const code = btoa(unescape(encodeURIComponent(JSON.stringify(state)))); try { await navigator.clipboard.writeText(code); toast('Save code copied.'); } catch (e) { $('io').innerHTML = `<input type="text" readonly value="${code}" onfocus="this.select()">`; } };
   $('imp').onclick = () => { $('io').innerHTML = '<input type="text" id="code" placeholder="Paste save code, then press Load"><div class="row2" style="margin-top:8px"><button class="btn sm" id="go">Load</button></div>'; $('go').onclick = () => { try { const raw = decodeURIComponent(escape(atob($('code').value.trim()))); if (!loadState(raw)) throw 0; localStorage.setItem(SAVE_KEY, raw); location.reload(); } catch (e) { toast('That save code did not work.'); } }; };
   $('rst').onclick = (e) => { if (e.target.dataset.sure) { try { localStorage.removeItem(SAVE_KEY); } catch (er) { /* ignore */ } state.last = 0; location.reload(); } else { e.target.dataset.sure = 1; e.target.textContent = 'Really erase everything?'; } };
 }
-$('bFolk').onclick = () => { if (!modalOpen) folkModal(); };
+$('bPeople').onclick = () => { if (!modalOpen) peopleModal(); };
 $('bBook').onclick = () => { if (!modalOpen) journalModal(); };
 $('menuBtn').onclick = () => { if (!modalOpen) menuModal(); };
 
-// ---------- HUD ----------
-ui = {
-  sheetDirty: true, t: 0,
-  update(dt) {
-    this.t += dt;
-    if (this.t > 0.2) {
-      this.t = 0;
-      $('sap').textContent = fmt(Math.floor(state.sap)); $('cogs').textContent = state.cogs;
-      const pm = sim.idlePerMinute(); $('rate').textContent = '+' + fmt(pm) + ' / min idle';
-      const sea = sim.sea; $('seasonName').textContent = sea.cur.name; $('seasonNote').textContent = sea.cur.note;
-      renderSheet(this.sheetDirty); this.sheetDirty = false;
-    }
-    const now = performance.now();
-    for (let i = bubbles.length - 1; i >= 0; i--) {
-      const b = bubbles[i], r = sim.rt.get(b.w.id);
-      if (now > b.until || !r) { b.el.remove(); bubbles.splice(i, 1); continue; }
-      const p = world.project(r.x, r.y + 0.5 * world.winderScale(), r.z);
-      if (!p.ok) { b.el.style.display = 'none'; continue; } b.el.style.display = ''; b.el.style.left = p.x + 'px'; b.el.style.top = p.y + 'px';
-    }
-  },
-};
+function introModal() {
+  openModal(`<div class="eyebrow">The Marigold Line</div><h2>A small train that is much larger on the inside.</h2>
+  <p>She has three carriages and one tired engine. Someone long ago stitched a charm into her seams, so that every room on board is as big as the people in it need.</p>
+  <p>The track appears only a little way ahead of the wheels. People wait at stations. Some of them will stay a while and fill the rooms you make. Some will leave something behind.</p>
+  <p>You are the conductor. Nothing here ever needs rushing.</p>
+  <div class="row2"><button class="btn" id="begin">All aboard</button></div>`, () => { setHint(0); });
+  $('begin').onclick = closeModal;
+}
+function awayModal(rep) {
+  const mins = Math.round(rep.secs / 60), t = mins >= 120 ? Math.round(mins / 60) + ' hours' : mins + ' minutes';
+  openModal(`<div class="eyebrow">Welcome back</div><h2>While you were away <em>${t}</em></h2>
+  <div class="stats"><div><b>+${fmt(rep.charm)}</b><small>Charm gathered</small></div><div><b>${rep.miles.toFixed(0)}</b><small>miles rolled</small></div></div>
+  ${rep.departed.length ? `<ul class="tales">${rep.departed.map((d) => `<li><b>${esc(d.p.name)}</b> stepped off at their stop and left <b>${esc(d.keep.name)}</b>.</li>`).join('')}</ul>` : ''}
+  ${rep.boarded.length ? `<ul class="tales">${rep.boarded.map((p) => `<li><b>${esc(p.name)}</b> came aboard while you were away.</li>`).join('')}</ul>` : ''}
+  ${rep.postcards.length ? `<div class="pcs">${rep.postcards.map((c) => `<div class="card-pc">${esc(c.text)}<small>Mile ${c.mile} · ${esc(c.region)}</small></div>`).join('')}</div>` : ''}
+  ${rep.waiting ? `<p>The Marigold is waiting at <b>${esc(rep.waiting.name)}</b>. Someone is on the platform.</p>` : ''}
+  <div class="row2"><button class="btn" id="ok">Back to the Line</button></div>`);
+  $('ok').onclick = closeModal;
+}
+
+// ---------- the inside: sheet, building, unfolding ----------
+const sheet = $('sheet');
+function sheetHide() { sheet.hidden = true; }
+const ERR = { locked: 'You do not know how to build that yet.', size: 'That is not a size this room can be.', outside: 'That is outside the unfolded space. Unfold more first.', overlap: 'That overlaps another room.', apart: 'A room has to touch an existing room.', charm: 'Not enough Charm.' };
+function renderSheet() {
+  if (view !== 'inside' || modalOpen || drawing) { sheet.hidden = true; return; }
+  if (sheetMode === 'build') {
+    sheet.hidden = false;
+    sheet.innerHTML = `<h3>Build a room<small>${fmt(state.charm)} Charm</small></h3><div class="grid">${Object.keys(ROOMS).map((t) => {
+      const d = ROOMS[t], ok = state.unlocked.includes(t), per = sim.roomCost(t, 1, 1);
+      return ok ? `<button class="act" data-b="${t}"><b>${d.name}</b><span class="cost">${per} Charm / tile</span><small>${d.blurb}</small></button>` : `<div class="act locked"><b>${d.name}</b><small>A passenger will bring the know-how.</small></div>`;
+    }).join('')}</div><div class="row2"><button class="btn ghost sm" data-a="close">Close</button></div>`;
+  } else if (sheetMode === 'unfold') {
+    sheet.hidden = false;
+    const dirs = [['n', 'North', '↑'], ['s', 'South', '↓'], ['w', 'West', '←'], ['e', 'East', '→']];
+    sheet.innerHTML = `<h3>Unfold more space<small>${fmt(state.charm)} Charm</small></h3><p style="margin:0;color:var(--muted);font-size:13px">The charm stretches the pocket by one row or column. Each unfolding costs a little more than the last.</p><div class="grid">${dirs.map(([d, n, a]) => { const can = sim.canUnfold(d), c = sim.unfoldCost(d); return `<button class="act" data-u="${d}" ${can && c <= state.charm ? '' : 'disabled'}><b>${a} ${n}</b><span class="cost ${c <= state.charm ? '' : 'no'}">${can ? c + ' Charm' : 'No more'}</span></button>`; }).join('')}</div><div class="row2"><button class="btn ghost sm" data-a="close">Close</button></div>`;
+  } else if (sheetMode === 'room' && selRoom && sim.roomById.get(selRoom.id)) {
+    const r = sim.roomById.get(selRoom.id), d = ROOMS[r.type], here = state.passengers.filter((p) => sim.roomAt(Math.floor(p.x), Math.floor(p.y)) === r);
+    const refund = Math.round(sim.roomCost(r.type, r.w, r.h) * 0.6 / 1);
+    sheet.hidden = false;
+    sheet.innerHTML = `<h3>${d.name}<small>${r.w} × ${r.h}${r.type === 'sleeper' ? ` · ${Math.floor(r.w * r.h / 3)} berths` : ''}</small></h3><p style="margin:0;color:var(--muted);font-size:13px">${d.blurb}</p>
+    ${here.length ? `<div class="chips">${here.map((p) => `<span class="chip">${esc(p.name)}</span>`).join('')}</div>` : ''}
+    <div class="row2"><button class="btn ghost sm" data-a="remove" ${state.rooms.length <= 2 ? 'disabled' : ''}>Take it down (+${refund})</button><button class="btn ghost sm" data-a="close">Close</button></div>`;
+  } else { sheet.hidden = true; }
+}
+sheet.addEventListener('click', (e) => {
+  audio.resume();
+  const b = e.target.closest('[data-b],[data-u],[data-a]'); if (!b || b.disabled) return;
+  if (b.dataset.b) { startDraw(b.dataset.b); return; }
+  if (b.dataset.u) { const r = sim.unfold(b.dataset.u); if (r) toast(esc(r)); else { audio.grow(); setHint(4); } sheetDirty = true; return; }
+  if (b.dataset.a === 'close') { sheetMode = null; selRoom = null; world.inside.setSelected(null); }
+  if (b.dataset.a === 'remove' && selRoom) { sim.demolish(selRoom.id); selRoom = null; sheetMode = null; world.inside.setSelected(null); audio.pop(); }
+  sheetDirty = true;
+});
+$('bBuild').onclick = () => { if (drawing) { cancelDraw(); return; } sheetMode = sheetMode === 'build' ? null : 'build'; selRoom = null; world.inside.setSelected(null); sheetDirty = true; };
+$('bUnfold').onclick = () => { if (drawing) return; sheetMode = sheetMode === 'unfold' ? null : 'unfold'; selRoom = null; world.inside.setSelected(null); sheetDirty = true; };
+
+function startDraw(type) {
+  drawing = { type, a: null, rect: null }; sheetMode = null; sheet.hidden = true;
+  world.inside.controls.enabled = false;
+  const d = ROOMS[type];
+  $('hint').innerHTML = `Drag on the floor to size the <b>${d.name}</b> (${d.line ? `a line ${d.min} to ${d.max} long` : `${d.min} to ${d.max} wide`}). Or just tap to place the smallest one.`; $('hint').hidden = false;
+  $('bBuild').textContent = 'Cancel'; $('bUnfold').hidden = true; platformDirty = true;
+}
+function cancelDraw() {
+  if (!drawing) return; drawing = null; world.inside.setGhost(null); world.inside.controls.enabled = view === 'inside'; $('drawcost').hidden = true;
+  $('bBuild').textContent = 'Build a room'; $('bUnfold').hidden = false; showHint();
+}
+function rectFor(type, a, b) {
+  const d = ROOMS[type]; const dx = b.x - a.x, dy = b.y - a.y; let w = Math.abs(dx) + 1, h = Math.abs(dy) + 1;
+  if (d.line) { if (Math.abs(dx) >= Math.abs(dy)) { w = clamp(w, d.min, d.max); h = 1; } else { h = clamp(h, d.min, d.max); w = 1; } }
+  else { w = clamp(w, d.min, d.max); h = clamp(h, d.min, d.max); }
+  const horizontalLine = d.line && h === 1 && w >= 1 && Math.abs(dx) >= Math.abs(dy);
+  const x = dx >= 0 ? a.x : a.x - (w - 1), y = dy >= 0 ? a.y : a.y - (h - 1);
+  return { x: horizontalLine && dx < 0 ? a.x - (w - 1) : x, y, w, h };
+}
+function updateDraw(cx, cy) {
+  const t = world.inside.tileAt(cx, cy); if (!t || !drawing) return;
+  if (!drawing.a) drawing.a = t;
+  const rc = rectFor(drawing.type, drawing.a, t); drawing.rect = rc;
+  const err = sim.canPlace(drawing.type, rc.x, rc.y, rc.w, rc.h);
+  world.inside.setGhost(drawing.type, rc.x, rc.y, rc.w, rc.h, !err);
+  const p = world.project(rc.x + rc.w / 2, 0.3, rc.y + rc.h / 2), el = $('drawcost');
+  el.hidden = false; el.style.left = p.x + 'px'; el.style.top = p.y + 'px'; el.classList.toggle('bad', !!err);
+  el.textContent = err ? ERR[err] : `${rc.w} × ${rc.h} · ${sim.roomCost(drawing.type, rc.w, rc.h)} Charm`;
+}
+function commitDraw() {
+  const dr = drawing; if (!dr || !dr.rect) { return; }
+  const rc = dr.rect, r = sim.build(dr.type, rc.x, rc.y, rc.w, rc.h);
+  if (typeof r === 'string') { toast(esc(ERR[r] || r)); world.inside.setGhost(null); dr.a = null; dr.rect = null; $('drawcost').hidden = true; return; }
+  audio.grow(); if (navigator.vibrate) navigator.vibrate(12); setHint(4); cancelDraw(); selRoom = r; sheetMode = 'room'; world.inside.setSelected(r);
+}
+
+// ---------- pointer input ----------
+const canvas = $('gl'); let ptr = null;
+canvas.addEventListener('pointerdown', (e) => {
+  ptr = { x: e.clientX, y: e.clientY, t: performance.now(), moved: false, id: e.pointerId };
+  if (drawing && view === 'inside') updateDraw(e.clientX, e.clientY);
+});
+canvas.addEventListener('pointermove', (e) => {
+  if (!ptr || ptr.id !== e.pointerId) return;
+  if (Math.hypot(e.clientX - ptr.x, e.clientY - ptr.y) > 9) ptr.moved = true;
+  if (drawing && view === 'inside') updateDraw(e.clientX, e.clientY);
+});
+canvas.addEventListener('pointerup', (e) => {
+  if (!ptr || ptr.id !== e.pointerId) return; const p = ptr; ptr = null;
+  if (drawing && view === 'inside') { commitDraw(); return; }
+  if (!p.moved && performance.now() - p.t < 450) tap(e.clientX, e.clientY);
+});
+canvas.addEventListener('pointercancel', () => { ptr = null; if (drawing) { world.inside.setGhost(null); drawing.a = null; drawing.rect = null; $('drawcost').hidden = true; } });
+function tap(x, y) {
+  if (view !== 'inside') return;
+  let best = null, bd = 34;
+  for (const p of state.passengers) { const q = world.project(p.x, 0.55, p.y); if (!q.ok) continue; const d = Math.hypot(q.x - x, q.y - y); if (d < bd) { bd = d; best = p; } }
+  if (best) { passengerModal(best); return; }
+  const t = world.inside.tileAt(x, y), r = t && sim.roomAt(t.x, t.y);
+  if (r) { selRoom = r; sheetMode = 'room'; world.inside.setSelected(r); audio.pop(); } else { selRoom = null; sheetMode = null; world.inside.setSelected(null); }
+  sheetDirty = true;
+}
+
+// ---------- hud updates ----------
+const roomLabels = new Map();
+let hudT = 0, chuffT = 0;
+function updateHud(dt, time) {
+  hudT += dt;
+  // stoke needle
+  stokeT += dt; needleQ = 0.5 + 0.5 * Math.sin(stokeT * 2.6);
+  $('needle').style.left = `calc((100% - 5px) * ${needleQ.toFixed(3)})`;
+  if (hudT > 0.2) {
+    hudT = 0;
+    $('charm').textContent = fmt(Math.floor(state.charm));
+    $('rate').textContent = '+' + fmt(sim.charmRate() * 60) + ' / min';
+    $('miles').textContent = fmt(Math.floor(state.miles)) + ' mi';
+    const L = state.line, reg = sim.region();
+    $('region').textContent = L.pending ? `waiting at ${L.pending.name}` : `${reg.name} · stop in ${Math.max(0.1, L.nextStop - state.miles).toFixed(1)} mi`;
+    const pr = (state.pressure - 22) / 78; $('steamBar').style.width = Math.round(clamp(pr, 0, 1) * 100 + 6) + '%'; $('steamTxt').textContent = `Steam · ${sim.speedMul().toFixed(1)}× speed`;
+    if (platformDirty) { renderPlatform(); platformDirty = false; } else renderPlatform();
+    if (forkDirty) { renderFork(); forkDirty = false; }
+    if (sheetDirty) { renderSheet(); sheetDirty = false; }
+    else if (sheetMode === 'build' || sheetMode === 'unfold') renderSheetCosts();
+    if (view === 'line' && !L.forkChosen && L.forkAnnounced) renderFork();
+  }
+  // room labels
+  const show = view === 'inside' && !modalOpen;
+  for (const r of state.rooms) {
+    let el = roomLabels.get(r.id);
+    if (!el) { el = document.createElement('div'); el.className = 'rname'; el.textContent = ROOMS[r.type].name; labels.appendChild(el); roomLabels.set(r.id, el); }
+    if (!show) { el.style.display = 'none'; continue; }
+    const p = world.project(r.x + r.w / 2, 0.75, r.y + r.h / 2); el.style.display = p.ok ? '' : 'none'; el.style.left = p.x + 'px'; el.style.top = p.y + 'px';
+  }
+  for (const [id, el] of roomLabels) if (!sim.roomById.has(id)) { el.remove(); roomLabels.delete(id); }
+  // soft train sound
+  chuffT -= dt; if (chuffT <= 0 && sim.speed > 0.02) { chuffT = 0.7 / sim.speedMul(); audio.chuff(view === 'line' ? 0.7 : 0.25); }
+}
+let lastCosts = '';
+function renderSheetCosts() { const sig = [state.charm | 0, state.rooms.length, state.unfolds].join(); if (sig !== lastCosts) { lastCosts = sig; renderSheet(); } }
 
 // ---------- start ----------
-if (fresh) { queueModal(introModal); }
+if (fresh) queueModal(introModal);
 else {
   const away = (Date.now() - state.last) / 1000;
-  if (away > 30) { const rep = sim.offline(away); if (away > 90 && rep.drops > 0) queueModal(() => awayModal(rep)); }
+  if (away > 30) { const rep = sim.offline(away); if (away > 90 && (rep.miles > 0.3 || rep.charm > 2)) queueModal(() => awayModal(rep)); }
   state.hint = Math.max(state.hint, 1);
 }
 sim.checkProgress(); showHint();
-$('hint').hidden = state.hint >= 4;
-
+world.line.recentre(world.aspect);
 let last = performance.now();
 function loop(t) {
   requestAnimationFrame(loop);
   let dt = (t - last) / 1000; last = t;
-  if (dt > 2.5) { const rep = sim.offline(dt); if (dt > 60 && rep.drops > 0) queueModal(() => awayModal(rep)); dt = 0.016; }
+  if (dt > 2.5) { const rep = sim.offline(dt); if (dt > 60 && (rep.miles > 0.3 || rep.charm > 2)) queueModal(() => awayModal(rep)); dt = 0.016; }
   dt = Math.min(dt, 0.1);
-  if (!modalOpen || true) sim.tick(dt);
-  world.frame(dt, t / 1000); ui.update(dt);
+  sim.tick(dt); world.frame(dt, t / 1000); updateHud(dt, t / 1000);
 }
 requestAnimationFrame(loop);

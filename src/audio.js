@@ -32,5 +32,14 @@ export class Audio {
   shake() { this.tone(300 + Math.random() * 120, 0.12, 0.05, 'triangle', 700); }
   pop() { this.tone(900, 0.1, 0.07, 'square', 1400); }
   grow() { this.tone(196, 0.35, 0.09, 'sine', 392); this.tone(294, 0.5, 0.06, 'triangle', 588); }
+  whistle() { this.tone(520, 0.5, 0.07, 'triangle', 660); setTimeout(() => this.tone(660, 0.7, 0.07, 'triangle', 640), 260); }
+  chuff(v = 0.5) {
+    if (!this.ctx || !this.enabled) return;
+    const c = this.ctx, n = c.sampleRate * 0.12, buf = c.createBuffer(1, n, c.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2.5);
+    const src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(); f.type = 'lowpass'; f.frequency.value = 520; g.gain.value = 0.05 * v;
+    src.buffer = buf; src.connect(f); f.connect(g); g.connect(this.master); src.start();
+  }
+  coal(perfect) { this.tone(perfect ? 330 : 200, 0.16, 0.08, 'square', perfect ? 660 : 160); if (perfect) setTimeout(() => this.note(7, 0.5), 80); }
   chord() { [0, 2, 4].forEach((s, i) => setTimeout(() => this.note(5 + s, 0.45), i * 90)); }
 }

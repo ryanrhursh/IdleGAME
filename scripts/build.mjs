@@ -14,5 +14,5 @@ console.log(`docs/index.html  ${(html.length / 1024).toFixed(0)} KB`);
 // Fragment for hosts that supply their own <html>/<head>/<body> wrapper.
 const style = /<style>[\s\S]*?<\/style>/.exec(html)[0];
 const body = /<body>([\s\S]*)<\/body>/.exec(html)[1];
-fs.writeFileSync('docs/fragment.html', `<title>Emberwood</title>\n${style}\n${body}`);
+fs.writeFileSync('docs/fragment.html', `<title>The Marigold Line</title>\n${style}\n${body}`);
 console.log('docs/fragment.html');
