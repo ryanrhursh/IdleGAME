@@ -14,8 +14,16 @@ if (!state) { state = newState(); fresh = true; }
 const audio = new Audio(); audio.enabled = state.sound !== false;
 const hooks = {};
 const sim = new Sim(state, hooks);
-const world = new World($('gl'), sim);
+let world;
+try { world = new World($('gl'), sim); }
+catch (e) {
+  document.body.insertAdjacentHTML('beforeend', '<div id="modal"><div class="card"><div class="eyebrow">The Marigold Line</div><h2>This device could not start 3D graphics.</h2><p>The game needs WebGL. Try a recent version of Safari, Chrome or Firefox, and make sure hardware acceleration is on. Your progress is safe.</p></div></div>');
+  throw e;
+}
+let errShown = false;
+addEventListener('error', () => { if (errShown) return; errShown = true; try { toast('Something went wrong. Your progress is saved; reloading the page is safe.'); } catch (e) { /* ignore */ } });
 window.__game = { sim, world, state, landmarkFor };
+if (state.gfx === 'low' || state.gfx === 'high') world.setGfx(state.gfx);
 function save() { try { state.last = Date.now(); localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (e) { /* storage may be unavailable */ } }
 addEventListener('visibilitychange', () => { if (document.hidden) save(); });
 addEventListener('pagehide', save);
@@ -168,6 +176,7 @@ function journalModal() {
 function menuModal() {
   openModal(`<div class="eyebrow">Settings</div><h2>The Marigold Line</h2>
   <div class="row2"><button class="btn ghost" id="snd">Sound: ${audio.enabled ? 'on' : 'off'}</button><button class="btn ghost" id="rc">Recentre the view</button></div>
+  <div class="row2"><button class="btn ghost" id="gfx">Graphics: ${({ low: 'Low (faster)', high: 'High', undefined: 'Auto' })[state.gfx]}</button></div>
   <div class="row2"><button class="btn ghost" id="auto">While I'm away, welcome travellers: ${state.auto ? 'yes' : 'no'}</button></div>
   <div><small style="color:var(--muted)">Name your train</small><input type="text" id="tn" maxlength="24" value="${esc(state.name)}" placeholder="The Marigold"></div>
   <div class="row2"><button class="btn ghost sm" id="exp">Copy save code</button><button class="btn ghost sm" id="imp">Load save code</button><button class="btn ghost sm" id="rst">Start over</button></div>
@@ -176,6 +185,7 @@ function menuModal() {
   $('snd').onclick = (e) => { audio.enabled = !audio.enabled; state.sound = audio.enabled; audio.apply(); e.target.textContent = 'Sound: ' + (audio.enabled ? 'on' : 'off'); };
   $('rc').onclick = () => { world.line.recentre(world.aspect); world.inside.fit(world.aspect); closeModal(); };
   $('auto').onclick = (e) => { state.auto = !state.auto; e.target.textContent = `While I'm away, welcome travellers: ${state.auto ? 'yes' : 'no'}`; };
+  $('gfx').onclick = (e) => { const order = [undefined, 'low', 'high'], i = (order.indexOf(state.gfx) + 1) % 3; state.gfx = order[i]; world.setGfx(state.gfx || 'auto'); e.target.textContent = 'Graphics: ' + ({ low: 'Low (faster)', high: 'High', undefined: 'Auto' })[state.gfx]; };
   $('tn').onchange = (e) => { state.name = e.target.value.trim().slice(0, 24); };
   $('exp').onclick = async () => { save(); const code = btoa(unescape(encodeURIComponent(JSON.stringify(state)))); try { await navigator.clipboard.writeText(code); toast('Save code copied.'); } catch (e) { $('io').innerHTML = `<input type="text" readonly value="${code}" onfocus="this.select()">`; } };
   $('imp').onclick = () => { $('io').innerHTML = '<input type="text" id="code" placeholder="Paste save code, then press Load"><div class="row2" style="margin-top:8px"><button class="btn sm" id="go">Load</button></div>'; $('go').onclick = () => { try { const raw = decodeURIComponent(escape(atob($('code').value.trim()))); if (!loadState(raw)) throw 0; localStorage.setItem(SAVE_KEY, raw); location.reload(); } catch (e) { toast('That save code did not work.'); } }; };
@@ -201,7 +211,7 @@ function awayModal(rep) {
   ${rep.boarded.length ? `<ul class="tales">${rep.boarded.map((p) => `<li><b>${esc(p.name)}</b> came aboard while you were away.</li>`).join('')}</ul>` : ''}
   ${rep.postcards.length ? `<div class="pcs">${rep.postcards.map((c) => `<div class="card-pc">${esc(c.text)}<small>Mile ${c.mile} · ${esc(c.region)}</small></div>`).join('')}</div>` : ''}
   ${rep.waiting ? `<p>The Marigold is waiting at <b>${esc(rep.waiting.name)}</b>. Someone is on the platform.</p>` : ''}
-  <div class="row2"><button class="btn" id="ok">Back to the Line</button></div>`);
+  <div class="row2"><button class="btn" id="ok">${rep.waiting ? 'Meet them' : 'Back to the Line'}</button></div>`, () => { if (state.line.pending) setTimeout(() => { if (!modalOpen && state.line.pending) stopModal(); }, 350); });
   $('ok').onclick = closeModal;
 }
 
@@ -309,7 +319,7 @@ function tap(x, y) {
 }
 
 // ---------- hud updates ----------
-const roomLabels = new Map();
+const roomLabels = new Map(), tagLabels = new Map();
 let hudT = 0, chuffT = 0;
 function updateHud(dt, time) {
   hudT += dt;
@@ -339,6 +349,14 @@ function updateHud(dt, time) {
     const p = world.project(r.x + r.w / 2, 0.75, r.y + r.h / 2); el.style.display = p.ok ? '' : 'none'; el.style.left = p.x + 'px'; el.style.top = p.y + 'px';
   }
   for (const [id, el] of roomLabels) if (!sim.roomById.has(id)) { el.remove(); roomLabels.delete(id); }
+  for (const p of state.passengers) {
+    let el = tagLabels.get(p.id);
+    if (!el) { el = document.createElement('div'); el.className = 'ptag'; labels.appendChild(el); tagLabels.set(p.id, el); }
+    el.textContent = p.name.split(' ')[0];
+    if (!show) { el.style.display = 'none'; continue; }
+    const q = world.project(p.x, 1.35, p.y); el.style.display = q.ok ? '' : 'none'; el.style.left = q.x + 'px'; el.style.top = q.y + 'px';
+  }
+  for (const [id, el] of tagLabels) if (!state.passengers.some((p) => p.id === id)) { el.remove(); tagLabels.delete(id); }
   // soft train sound
   chuffT -= dt; if (chuffT <= 0 && sim.speed > 0.02) { chuffT = 0.7 / sim.speedMul(); audio.chuff(view === 'line' ? 0.7 : 0.25); }
 }

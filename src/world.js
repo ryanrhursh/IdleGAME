@@ -44,7 +44,13 @@ export class World {
     const v = this.tmp.set(x, y, z).project(this.cam), r = this.canvas.getBoundingClientRect();
     out.x = (v.x * 0.5 + 0.5) * r.width + r.left; out.y = (-v.y * 0.5 + 0.5) * r.height + r.top; out.ok = v.z < 1 && v.z > -1; return out;
   }
-  degrade() { if (this.quality === 'low') return; this.quality = 'low'; this.useBloom = false; this.pr = Math.min(this.pr, 1.25); this.resize(); }
+  setGfx(mode) {
+    this.gfxMode = mode;
+    if (mode === 'low') { this.quality = 'low'; this.useBloom = false; this.pr = Math.min(devicePixelRatio || 1, 1.25); this.resize(); }
+    else { this.quality = 'high'; this.useBloom = true; this.pr = Math.min(devicePixelRatio || 1, 2); this.frameT.length = 0; this.resize(); }
+  }
+  degrade() {
+    if (this.gfxMode === 'high' || this.quality === 'low') return; this.quality = 'low'; this.useBloom = false; this.pr = Math.min(this.pr, 1.25); this.resize(); }
   frame(dt, time) {
     if (this.view === 'line') this.line.update(dt, time); else this.inside.update(dt, time);
     if (this.useBloom) this.composer.render(); else this.renderer.render(this.pass.scene, this.pass.camera);
