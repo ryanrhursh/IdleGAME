@@ -1,5 +1,13 @@
 # Hand-off notes
 
+## Latest: meeting people, and what happens after they leave
+- **Talk first (optional):** at a stop, the quick *Invite aboard* still works. *Talk first* opens a short scene: you read a small tell (a glance at the kettle, reading every sign, standing apart) and choose to offer tea, ask about their journey, or give quiet. Reading them well starts them warmer (their first tale opens at once); everyone is welcomed either way.
+- **Farewells:** leaving is a card with a gesture that fits who they were, their keepsake, and a promise they may write or return.
+- **Letters:** every departed passenger writes a letter 30 to 110 miles later (8 hobbies x 2 letters). Letters live in Journal > Postcards, and a slip tells you one has come.
+- **Old friends return:** about one passenger stop in five (once someone has been gone 80+ miles) is a returning guest who says what has changed, arrives warm, brings a gift of Charm, and keeps the tales they had told.
+- Two new chapters unlock from this: *The Post Car* and *A Familiar Face*.
+Please check: do the replies and letters feel warm rather than samey? Is a returning guest too rare or too common? Does Talk first feel worth the extra tap?
+
 ## Latest: the storybook look and the writing book
 Storybook is now the default look (Settings > Look switches between five; `?look=` in the address also works).
 The Journal is now a book with five tabs: **Chapters** (21 pages that write themselves as you travel, each with an ink-wash plate and a drop cap;

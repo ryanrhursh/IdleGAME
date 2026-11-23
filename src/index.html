@@ -183,6 +183,12 @@ body[data-look="cinema"] .quote { font-family: var(--display); font-weight: 300;
 body[data-look="cinema"] #dock button[aria-pressed="true"] { background: transparent; color: var(--gold); box-shadow: inset 0 -2px 0 var(--gold); border-radius: 0; }
 
 
+
+.tell { margin: 0; font-style: italic; color: var(--muted); font-size: 14px; }
+.talk { display: grid; gap: 8px; } .talk .act { min-height: 0; padding: 12px 14px; } .talk .act b { font-size: 16px; }
+.book .card-pc.letter { background: #fff7e0; border-left: 4px solid #b84a1c; font-family: var(--display); } .book .card-pc.letter em { font-size: 16px; line-height: 1.5; color: #3a2616; } .book .card-pc.letter small { color: #b84a1c; }
+.book .since { border-left-color: #2a7a4a; }
+
 /* ---------- the storybook ---------- */
 #chapterBanner { position: fixed; left: 50%; transform: translateX(-50%); top: calc(var(--sat) + 74px); width: min(420px, calc(100vw - 28px)); text-align: center; display: grid; gap: 2px; pointer-events: none; padding: 12px 18px 14px; background: #f7ecd4; color: #3a2616; border: 2px solid #8a5a34; border-radius: 6px 16px 8px 18px; box-shadow: 3px 5px 0 rgba(60, 36, 20, .5); font-family: "IM Fell English", Georgia, serif; z-index: 8; }
 #chapterBanner.show { animation: chap 6.2s ease-out forwards; }

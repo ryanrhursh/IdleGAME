@@ -1,5 +1,5 @@
 // Headless checks of the Marigold Line rules.
-import { Sim, newState, loadState, regionOf, passengerAt, fmt } from '../src/logic.js';
+import { Sim, newState, loadState, regionOf, passengerAt, fmt, talkOutcome, leaningOf, tellOf } from '../src/logic.js';
 let fails = 0;
 const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console.log('ok  ', m); };
 
@@ -72,6 +72,32 @@ sim.restyle(rm.id); ok(rm.style === 1, 'restyle cycles the colors');
 sim.checkProgress(); ok(s.journal.includes('start'), 'the first chapter is there from the beginning');
 ok(s.plates.length >= 3, `regions you cross become plates in the book (${s.plates.length})`);
 const prog = sim.loreProgress({ need: { miles: 10000 } }); ok(prog >= 0 && prog < 1, 'progress toward a locked chapter is a fraction');
+// conversations, farewells, letters and old friends coming back
+{
+  const s3 = newState(); const sim3 = new Sim(s3, {}); s3.line.pending = { idx: 0, name: 'Test Quay', mile: 0 };
+  const c0 = passengerAt(0, s3.line.seed), L0 = leaningOf(c0);
+  const good = talkOutcome(c0, L0); ok(good.level === 'delighted' && good.mood >= 30, 'reading someone well starts things warmly');
+  const other = ['warm', 'curious', 'space'].filter((x) => x !== L0).map((x) => talkOutcome(c0, x));
+  ok(other.every((o) => o.mood < good.mood && o.mood >= 9), 'a different choice is still welcoming, just cooler');
+  ok(tellOf(c0).includes('Rosalind'), 'there is a tell to read: ' + tellOf(c0));
+  let tales = 0; sim3.h.tale = () => tales++; 
+  ok(sim3.invite(good) === null && s3.passengers[0].mood >= 30 && tales === 1, 'a delighted start opens their first tale at once');
+  ok(s3.passengers[0].first.level === 'delighted', 'first impression is remembered');
+  // farewell, letter, return
+  const depart = []; sim3.h.depart = (d) => depart.push(d); const letters = []; sim3.h.letter = (c) => letters.push(c);
+  s3.passengers[0].dest = s3.miles + 1; s3.line.nextStop = 1e9; s3.line.nextLandmark = 1e9;
+  for (let i = 0; i < 400 && !depart.length; i++) sim3.tick(0.1);
+  sim3.advance(0.2); ok(depart.length === 1 && depart[0].farewell.includes('Rosalind'), 'a farewell is written when someone leaves');
+  ok(s3.departed.length === 1 && s3.mail.length === 1, 'they are remembered, and a letter is on its way');
+  sim3.advance(200); ok(letters.length === 1 && letters[0].from === 'Rosalind Thorne', 'the letter arrives: ' + (letters[0] && letters[0].text.slice(0, 40)));
+  s3.line.pending = null; s3.line.nextStop = s3.miles + 0.01; s3.line.stopIndex = 9;
+  let returned = false;
+  for (let k = 0; k < 200 && !returned; k++) { s3.line.nextStop = s3.miles + 0.01; s3.line.pending = null; sim3.advance(0.05); if (s3.line.pending && s3.line.pending.returning !== undefined) returned = true; s3.line.stopIndex += 1; }
+  ok(returned, 'an old friend turns up at a later stop');
+  const sp = sim3.stopPerson(); ok(sp && sp.returning && sp.c.name === 'Rosalind Thorne', 'the stop recognises them');
+  const before = s3.charm; ok(sim3.invite() === null && s3.returns === 1 && s3.charm > before, 'they come aboard again, with a gift of Charm');
+  ok(s3.passengers[0].since && s3.passengers[0].mood >= 55 && s3.passengers[0].tales >= 1, 'they remember you, and say what has changed');
+}
 // save round trip
 const back = loadState(JSON.stringify(s)); ok(back && back.rooms.length === s.rooms.length, 'save round-trips');
 console.log(fails ? `${fails} FAILED` : 'all passed'); process.exit(fails ? 1 : 0);

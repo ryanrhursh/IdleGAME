@@ -1,7 +1,7 @@
-import { Sim, newState, loadState, fmt, clamp, defOf, passengerAt, regionOf, stopName, landmarkFor, GW, GH } from './logic.js';
+import { Sim, newState, loadState, fmt, clamp, defOf, passengerAt, regionOf, stopName, landmarkFor, tellOf, talkOutcome, GW, GH } from './logic.js';
 import { World } from './world.js';
 import { Audio } from './audio.js';
-import { ROOMS, LORE, HINTS, HOBBY_ROOM, VOLUMES, NEED_TEXT, PALETTES } from './data.js';
+import { ROOMS, LORE, HINTS, HOBBY_ROOM, VOLUMES, NEED_TEXT, PALETTES, TALK, RAPPORT_TEXT, RETURN_LINES } from './data.js';
 import { LOOK, LOOKS, LOOK_ID, saveLook } from './look.js';
 import { scene, portrait, plateSwatch } from './scenes.js';
 document.body.dataset.look = LOOK.ui;
@@ -25,7 +25,7 @@ catch (e) {
 }
 let errShown = false;
 addEventListener('error', () => { if (errShown) return; errShown = true; try { toast('Something went wrong. Your progress is saved; reloading the page is safe.'); } catch (e) { /* ignore */ } });
-window.__game = { sim, world, state, landmarkFor, stopModal: () => stopModal() };
+window.__game = { sim, world, state, landmarkFor, stopModal: () => stopModal(), farewellModal: (p, k, f) => farewellModal(p, k, f), talkScene: (c, st) => talkScene(c, st) };
 if (state.gfx === 'low' || state.gfx === 'high') world.setGfx(state.gfx);
 function save() { try { state.last = Date.now(); localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (e) { /* storage may be unavailable */ } }
 addEventListener('visibilitychange', () => { if (document.hidden) save(); });
@@ -75,7 +75,8 @@ hooks.fork = () => { forkDirty = true; toast('A <b>fork</b> in the Line is comin
 hooks.board = (p, c) => { toast(`<b>${esc(p.name)}</b> boards. ${esc(c.trait)}.`); audio.chord(); setHint(2); platformDirty = true; };
 hooks.unlock = (type) => toast(`<b>${esc(ROOMS[type].name)}</b> unlocked. You can build one now.`);
 hooks.tale = (p, text) => { toast(`<b>${esc(p.name)}</b> opened up. A new tale is in People.`); badge('bPeople', true); audio.note(9, 0.5); };
-hooks.depart = ({ p, keep }) => { toast(`<b>${esc(p.name)}</b> steps off at their stop and leaves <b>${esc(keep.name)}</b>.`); audio.chord(); };
+hooks.depart = ({ p, keep, farewell }) => { showSlip('\u2766 A farewell', p.name, () => farewellModal(p, keep, farewell)); audio.chord(); };
+hooks.letter = (c) => { showSlip('\u2709 A letter has come', 'from ' + c.from.split(' ')[0], () => bookModal(null, 'postcards')); badge('bBook', true); audio.note(8, 0.5); };
 hooks.lore = (e) => { if (e.id !== 'start') { showPageNote(e); badge('bBook', true); audio.note(11, 0.45); } };
 
 // ---------- storybook touches: chapter banners and new-page slips ----------
@@ -89,11 +90,17 @@ function showChapter(r) {
   el.hidden = false; el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
   clearTimeout(chapterTimer); chapterTimer = setTimeout(() => { el.hidden = true; }, 6200);
 }
-function showPageNote(e) {
-  const b = $('pageNote'); b.dataset.id = e.id; b.innerHTML = `<span>✎ A page has been written</span><b>${esc(e.title)}</b>`; b.hidden = false;
-  clearTimeout(noteTimer); noteTimer = setTimeout(() => { b.hidden = true; }, 10000);
+const slipQ = []; let slipAct = null, slipOn = false;
+function nextSlip() {
+  const b = $('pageNote'), s = slipQ.shift();
+  if (!s) { b.hidden = true; slipOn = false; slipAct = null; return; }
+  slipOn = true; slipAct = s.act; b.innerHTML = `<span>${s.label}</span><b>${esc(s.title)}</b>`; b.hidden = false;
+  b.style.animation = 'none'; void b.offsetWidth; b.style.animation = '';
+  clearTimeout(noteTimer); noteTimer = setTimeout(nextSlip, 9000);
 }
-$('pageNote').onclick = () => { $('pageNote').hidden = true; if (!modalOpen) bookModal($('pageNote').dataset.id); };
+function showSlip(label, title, act) { slipQ.push({ label, title, act }); if (!slipOn) nextSlip(); }
+function showPageNote(e) { showSlip('✎ A page has been written', e.title, () => bookModal(e.id)); }
+$('pageNote').onclick = () => { const a = slipAct; clearTimeout(noteTimer); nextSlip(); if (a && !modalOpen) a(); };
 
 // ---------- view switching ----------
 let view = 'line', platformDirty = true, forkDirty = true, sheetDirty = true, sheetMode = null, drawing = null, selRoom = null;
@@ -142,17 +149,46 @@ $('platform').onclick = () => { if (!modalOpen) stopModal(); };
 // ---------- the stop: meeting a passenger ----------
 function stopModal() {
   const st = state.line.pending; if (!st) return;
-  const c = passengerAt(st.idx, state.line.seed), free = sim.freeBeds();
-  const gift = c.gift && !state.unlocked.includes(c.gift) ? `Brings the know-how for a <b>${esc(ROOMS[c.gift].name)}</b>.` : c.gift ? `Already knows a craft you have: ${esc(ROOMS[c.gift].name)}.` : '';
-  openModal(`<div class="head">${portrait(seedOf(c.name), 76)}<div><div class="eyebrow">Platform · ${esc(st.name)}</div><h2>${esc(c.name)}</h2></div></div>
-  <div class="chips"><span class="chip">${esc(c.trait)}</span>${c.hobby ? `<span class="chip">likes: ${esc(c.hobby === 'chat' ? 'good company' : ROOMS[HOBBY_ROOM[c.hobby]].name)}</span>` : ''}</div>
-  <div class="quote">${esc(c.line)}</div>
+  const sp = sim.stopPerson(), c = sp.c, free = sim.freeBeds(), first = c.name.split(' ')[0];
+  const hobbyName = c.hobby ? (c.hobby === 'chat' ? 'good company' : ROOMS[HOBBY_ROOM[c.hobby]].name) : '';
+  const gift = !sp.returning && c.gift && !state.unlocked.includes(c.gift) ? `Brings the know-how for a <b>${esc(ROOMS[c.gift].name)}</b>.` : !sp.returning && c.gift ? `Already knows a craft you have: ${esc(ROOMS[c.gift].name)}.` : '';
+  const story = sp.returning
+    ? `<div class="quote">${esc(first)} is back on the platform, waving with the whole arm. ${esc(RETURN_LINES[c.hobby || 'chat'])}</div>`
+    : `<div class="quote">${esc(c.line)}</div><p class="tell">${esc(tellOf(c))}</p>`;
+  openModal(`<div class="head">${portrait(seedOf(c.name), 76)}<div><div class="eyebrow">${sp.returning ? 'A familiar face' : 'Platform'} · ${esc(st.name)}</div><h2>${esc(c.name)}</h2></div></div>
+  <div class="chips"><span class="chip">${esc(c.trait)}</span>${hobbyName ? `<span class="chip">likes: ${esc(hobbyName)}</span>` : ''}</div>
+  ${story}
   <p>${gift} Berths free: <b>${free}</b> of ${sim.beds}.</p>
-  <div class="row2"><button class="btn" id="inv" ${free <= 0 ? 'disabled' : ''}>Invite aboard</button><button class="btn ghost" id="wave">Wave goodbye</button><button class="btn ghost" id="later">Not yet</button></div>
+  <div class="row2"><button class="btn" id="inv" ${free <= 0 ? 'disabled' : ''}>${sp.returning ? 'Welcome them back' : 'Invite aboard'}</button>${sp.returning ? '' : `<button class="btn ghost" id="talk" ${free <= 0 ? 'disabled' : ''}>Talk first</button>`}<button class="btn ghost" id="wave">${sp.returning ? 'Not this time' : 'Wave goodbye'}</button><button class="btn ghost" id="later">Not yet</button></div>
   ${free <= 0 ? '<p style="color:var(--bad);font-size:13px">No berth is free. Build more Sleeper space inside, then come back to the platform.</p>' : ''}`, () => { platformDirty = true; });
   $('inv').onclick = () => { const r = sim.invite(); if (r) toast(esc(r)); else { audio.chord(); closeModal(); } };
-  $('wave').onclick = () => { sim.decline(); toast('You wave from the window until they are small.'); closeModal(); };
+  if ($('talk')) $('talk').onclick = () => talkScene(c, st);
+  $('wave').onclick = () => { sim.decline(); toast(sp.returning ? 'You wave, and promise to look for them again.' : 'You wave from the window until they are small.'); closeModal(); };
   $('later').onclick = closeModal;
+}
+// The optional conversation. Whatever you do, they come aboard; reading them well just starts things warmer.
+function talkScene(c, st) {
+  openModal(`<div class="head">${portrait(seedOf(c.name), 76)}<div><div class="eyebrow">A word on the platform</div><h2>${esc(c.name)}</h2></div></div>
+  <p class="tell">${esc(tellOf(c))}</p>
+  <p>What do you do?</p>
+  <div class="talk">${Object.entries(TALK).map(([k, t]) => `<button class="act" data-k="${k}"><b>${esc(t.label)}</b><small>${esc(t.sub)}</small></button>`).join('')}</div>
+  <div class="row2"><button class="btn ghost" id="back">Never mind</button></div>`, () => { platformDirty = true; });
+  modal.querySelectorAll('[data-k]').forEach((b) => { b.onclick = () => {
+    const o = talkOutcome(c, b.dataset.k);
+    modal.querySelector('.card').innerHTML = `<div class="head">${portrait(seedOf(c.name), 76)}<div><div class="eyebrow">${esc(RAPPORT_TEXT[o.level])}</div><h2>${esc(c.name)}</h2></div></div>
+      <div class="quote">${esc(o.reply)}</div>
+      <div class="row2"><button class="btn" id="board">Welcome aboard</button></div>`;
+    $('board').onclick = () => { const r = sim.invite(o); if (r) toast(esc(r)); else { audio.chord(); closeModal(); } };
+  }; });
+  $('back').onclick = () => { closeModal(); setTimeout(() => { if (state.line.pending && !modalOpen) stopModal(); }, 50); };
+}
+function farewellModal(p, keep, farewell) {
+  openModal(`<div class="head">${portrait(seedOf(p.name), 76)}<div><div class="eyebrow">A farewell</div><h2>${esc(p.name)} steps off</h2></div></div>
+  <div class="quote">${esc(farewell)}</div>
+  <p>They leave <b>${esc(keep.name)}</b> behind. ${esc(keep.line)}</p>
+  <p style="color:var(--muted);font-size:14px;font-style:italic">They may write. They may come back.</p>
+  <div class="row2"><button class="btn" id="x">Wave from the window</button></div>`);
+  $('x').onclick = closeModal;
 }
 
 // ---------- people ----------
@@ -172,6 +208,8 @@ function passengerModal(p) {
   openModal(`<div class="head">${portrait(seedOf(p.name), 76)}<div><div class="eyebrow">${esc(d.trait)}</div><h2>${esc(p.name)}</h2></div></div>
   <div><small style="color:var(--muted)">Fondness for the train</small>${moodBar(p)}</div>
   <p style="color:var(--muted)">Getting off in about <b style="color:var(--gold)">${Math.max(1, Math.round(p.dest - state.miles))} miles</b>. Likes ${esc(d.hobby === 'chat' ? 'good company' : ROOMS[HOBBY_ROOM[d.hobby]].name)}.</p>
+  ${p.first ? `<p style="color:var(--muted);font-size:13px">How you met: <b style="color:var(--gold)">${esc(p.first.level === 'returned' ? 'An old friend, back aboard.' : RAPPORT_TEXT[p.first.level] || '')}</b>${p.first.choice ? ' You ' + esc(TALK[p.first.choice].label.toLowerCase()) + '.' : ''}</p>` : ''}
+  ${p.since ? `<p class="tell">Since last time: ${esc(p.since)}</p>` : ''}
   ${p.trip ? `<p style="color:var(--muted);font-size:13px">Average trip: <b style="color:var(--gold)">${Math.round(p.trip)} steps</b>. ${p.trip <= 6 ? 'Short walks make them happy: +25% Charm.' : p.trip <= 12 ? 'A comfortable walk.' : 'Long walks wear on them. Move their favorite rooms closer to the berths.'}</p>` : ''}
   <ul class="tales">${d.tales.map((t, i) => `<li class="${i < p.tales ? '' : 'locked'}">${i < p.tales ? esc(t) : 'A tale they have not told yet. It comes when they feel at home.'}</li>`).join('')}</ul>
   <div class="row2"><button class="btn" id="find">Find them inside</button><button class="btn ghost" id="x">Close</button></div>
@@ -184,8 +222,8 @@ function passengerModal(p) {
 let bookTab = 'chapters', bookIdx = 0, folkIdx = 0;
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
 function needLine(e) { return Object.entries(e.need).map(([k, v]) => NEED_TEXT[k](v)).join(' and '); }
-function bookModal(openId) {
-  badge('bBook', false);
+function bookModal(openId, tab) {
+  badge('bBook', false); if (tab) bookTab = tab;
   if (openId) { const i = LORE.findIndex((e) => e.id === openId); if (i >= 0) { bookTab = 'chapters'; bookIdx = i; } }
   else if (bookTab === 'chapters') { let last = 0; LORE.forEach((e, i) => { if (state.journal.includes(e.id)) last = i; }); bookIdx = Math.min(LORE.length - 1, Math.max(bookIdx, last)); }
   openModal(`<div class="book"><div class="spine"><span>${esc(state.name || 'The Marigold Line')}</span><small>${state.journal.length} of ${LORE.length} pages written</small></div>
@@ -206,13 +244,13 @@ function renderBook(flip) {
   } else if (bookTab === 'folk') {
     const ps = state.passengers; folkIdx = Math.min(folkIdx, Math.max(0, ps.length - 1));
     if (!ps.length) html = '<div class="vol">The Folk</div><h3>No one is aboard</h3><p class="dropcap">When someone steps onto the Marigold, their page is started here, and it fills in as they feel at home.</p>';
-    else { const p = ps[folkIdx], d = defOf(p); html = `<div class="vol">The Folk</div><div class="folkhead">${portrait(seedOf(p.name), 84)}<div><h3>${esc(p.name)}</h3><p class="trait">${esc(d.trait)}</p><p class="trait">Off in about ${Math.max(1, Math.round(p.dest - state.miles))} miles</p></div></div>${d.tales.map((t, i) => `<p class="${i < p.tales ? 'tale' : 'tale blankline'}">${i < p.tales ? esc(t) : 'Not yet told.'}</p>`).join('')}`; }
+    else { const p = ps[folkIdx], d = defOf(p); html = `<div class="vol">The Folk</div><div class="folkhead">${portrait(seedOf(p.name), 84)}<div><h3>${esc(p.name)}</h3><p class="trait">${esc(d.trait)}</p><p class="trait">Off in about ${Math.max(1, Math.round(p.dest - state.miles))} miles</p></div></div>${p.since ? `<p class="tale since">Since last time: ${esc(p.since)}</p>` : ''}${d.tales.map((t, i) => `<p class="${i < p.tales ? 'tale' : 'tale blankline'}">${i < p.tales ? esc(t) : 'Not yet told.'}</p>`).join('')}${p.first ? `<p class="trait">${esc(p.first.level === 'returned' ? 'An old friend, back aboard.' : RAPPORT_TEXT[p.first.level] || '')}</p>` : ''}`; }
     pagerHtml = ps.length > 1 ? `<button id="pv" ${folkIdx <= 0 ? 'disabled' : ''}>‹</button><span>${folkIdx + 1} of ${ps.length}</span><button id="nx" ${folkIdx >= ps.length - 1 ? 'disabled' : ''}>›</button>` : '';
   } else if (bookTab === 'plates') {
     const pl = (state.plates || []).slice().reverse();
     html = `<div class="vol">Plates</div><p class="intro">Each region you cross is painted into the book. There is always another.</p><div class="plates">${pl.map((x) => { const P = PALETTES[x.pal] || PALETTES[0]; return `<figure>${plateSwatch(hex(P.sky[0]), hex(P.sky[1]), hex(P.ground), hex(P.tint), x.weather)}<figcaption><b>${esc(x.name)}</b><span>${esc(x.line)}</span><small>Mile ${x.mile}</small></figcaption></figure>`; }).join('')}</div>`;
   } else if (bookTab === 'postcards') {
-    html = `<div class="vol">Postcards</div><div class="pcs">${state.postcards.length ? state.postcards.slice().reverse().slice(0, 40).map((c) => `<div class="card-pc">${esc(c.text)}<small>Mile ${c.mile} · ${esc(c.region)}</small></div>`).join('') : '<p class="intro">Postcards turn up as the Line rolls by.</p>'}</div>`;
+    html = `<div class="vol">Postcards</div><div class="pcs">${state.postcards.length ? state.postcards.slice().reverse().slice(0, 40).map((c) => c.from ? `<div class="card-pc letter"><em>${esc(c.text)}</em><small>\u2709 ${esc(c.from)} · mile ${c.mile}</small></div>` : `<div class="card-pc">${esc(c.text)}<small>Mile ${c.mile} · ${esc(c.region)}</small></div>`).join('') : '<p class="intro">Postcards turn up as the Line rolls by.</p>'}</div>`;
   } else {
     html = `<div class="vol">Keepsakes</div>${state.keepsakes.length ? `<ul class="keeps">${state.keepsakes.map((k) => `<li><b>${esc(k.name)}</b><span>left by ${esc(k.who)}. ${esc(k.line)}</span></li>`).join('')}</ul>` : '<p class="intro">When someone steps off at their stop, they leave a small thing behind. It will be kept here.</p>'}`;
   }

@@ -1,5 +1,5 @@
 // Game rules and simulation for the Marigold Line. No rendering code lives here.
-import { ROOMS, HOBBY_ROOM, PASSENGERS, GEN_FIRST, GEN_LAST, GEN_TYPES, REGION_ADJ, REGION_NOUN, STOP_A, STOP_B, PALETTES, WEATHER, HINT_WORDS, LANDMARKS, POSTCARD_OPEN, LORE, PLATE_LINES } from './data.js';
+import { ROOMS, HOBBY_ROOM, PASSENGERS, GEN_FIRST, GEN_LAST, GEN_TYPES, REGION_ADJ, REGION_NOUN, STOP_A, STOP_B, PALETTES, WEATHER, HINT_WORDS, LANDMARKS, POSTCARD_OPEN, LORE, PLATE_LINES, TELLS, REPLIES, LETTERS, RETURN_LINES, FAREWELLS } from './data.js';
 
 export const GW = 24, GH = 16;
 export const BASE_SPEED = 0.12; // miles per second at idle pressure
@@ -56,6 +56,16 @@ export function defOf(p) {
   return { trait: g.trait, hobby: g.hobby, tales: g.tales.map((t) => t.replace(/\{n\}/g, n)), keep: { name: `${n}'s keepsake`, line: 'Something small is left behind, and it makes the room feel kinder.' } };
 }
 
+// ---------- meeting people ----------
+const LEANS = ['warm', 'curious', 'space'];
+export function leaningOf(c) { return LEANS[hash('lean:' + c.name) % 3]; }
+export function tellOf(c) { const a = TELLS[leaningOf(c)]; return a[hash('tell:' + c.name) % a.length].replace(/\{name\}/g, c.name.split(' ')[0]); }
+// How the conversation at a stop goes. Everyone is welcome either way; reading them well starts things warmer.
+export function talkOutcome(c, choice) {
+  const d = (LEANS.indexOf(choice) - LEANS.indexOf(leaningOf(c)) + 3) % 3, level = d === 0 ? 'delighted' : d === 1 ? 'warm' : 'polite';
+  return { choice, level, mood: { delighted: 34, warm: 16, polite: 9 }[level], reply: REPLIES[level][choice].replace(/\{name\}/g, c.name.split(' ')[0]) };
+}
+
 // ---------- state ----------
 export function newState(now = Date.now()) {
   return {
@@ -63,7 +73,7 @@ export function newState(now = Date.now()) {
     grid: { x0: 6, y0: 4, x1: 15, y1: 9 },
     rooms: [{ id: 1, type: 'sleeper', x: 6, y: 4, w: 3, h: 3 }, { id: 2, type: 'dining', x: 9, y: 4, w: 4, h: 3 }, { id: 3, type: 'corridor', x: 6, y: 7, w: 10, h: 1 }],
     nextRoom: 4, unlocked: ['sleeper', 'dining', 'parlor', 'corridor'],
-    passengers: [], nextPid: 1, keepsakes: [], postcards: [], tickets: [], plates: [], talesHeard: 0, journal: [],
+    passengers: [], nextPid: 1, keepsakes: [], postcards: [], tickets: [], plates: [], talesHeard: 0, departed: [], mail: [], returns: 0, lettersGot: 0, journal: [],
     line: { seed: Math.floor(Math.random() * 1e9), region: 'M', regionStart: 0, nextStop: 2.5, stopIndex: 0, nextLandmark: 7, forkChosen: null, forkAnnounced: false, pending: null },
     hint: 0, auto: false, sound: true, name: '', paintSeen: false,
   };
@@ -90,7 +100,7 @@ export class Sim {
     this.index();
   }
   ev(name, a, b) {
-    if (this.quiet) { const q = this.quiet; if (name === 'postcard') q.postcards.push(a); else if (name === 'depart') q.departed.push(a); else if (name === 'region') q.regions.push(a); else if (name === 'board') q.boarded.push(a); else if (name === 'fork') { /* ignored offline */ } return; }
+    if (this.quiet) { const q = this.quiet; if (name === 'postcard') q.postcards.push(a); else if (name === 'depart') q.departed.push(a); else if (name === 'region') q.regions.push(a); else if (name === 'board') q.boarded.push(a); else if (name === 'letter') q.postcards.push(a); else if (name === 'fork') { /* ignored offline */ } return; }
     const f = this.h[name]; if (f) f(a, b);
   }
 
@@ -233,17 +243,29 @@ export class Sim {
   // ---------- passengers ----------
   freeBeds() { return this.beds - this.s.passengers.length; }
   candidate() { return passengerAt(this.s.metCount, this.s.line.seed); }
-  invite() {
+  stopPerson() {
+    const L = this.s.line, st = L.pending; if (!st) return null;
+    if (st.returning !== undefined) { const rec = this.s.departed[st.returning]; return { returning: true, rec, c: { ...passengerAt(rec.idx, L.seed), name: rec.name } }; }
+    return { returning: false, c: passengerAt(st.idx, L.seed) };
+  }
+  invite(opts = {}) {
     const L = this.s.line, st = L.pending; if (!st) return 'Nobody is waiting.';
     if (this.freeBeds() <= 0) return 'No berth free. Build more Sleeper space, or wait for someone to reach their stop.';
-    const c = passengerAt(st.idx, L.seed), s = this.s;
-    const sl = s.rooms.find((r) => r.type === 'sleeper');
-    const p = { id: s.nextPid++, kind: c.kind, idx: c.idx, gt: c.gt, name: c.name, mood: 6, tales: 0, board: s.miles, dest: s.miles + 130 + Math.floor(rng(hash('d' + c.idx + L.seed))() * 200), x: sl.x + 0.5, y: sl.y + 0.5 };
+    const s = this.s, sl = s.rooms.find((r) => r.type === 'sleeper');
+    if (st.returning !== undefined) {
+      const rec = s.departed[st.returning], c = passengerAt(rec.idx, L.seed), hobby = c.hobby || 'chat';
+      const tales = Math.min(3, rec.tales || 0);
+      const p = { id: s.nextPid++, kind: c.kind, idx: c.idx, gt: c.gt, name: rec.name, mood: Math.max(55, [0, 30, 60, 90][tales]), tales, board: s.miles, dest: s.miles + 130 + Math.floor(Math.random() * 200), x: sl.x + 0.5, y: sl.y + 0.5, visits: (rec.visits || 0) + 1, since: RETURN_LINES[hobby] || RETURN_LINES.chat, first: { level: 'returned' } };
+      rec.back = true; s.returns = (s.returns || 0) + 1; s.charm += 40; s.passengers.push(p); L.pending = null;
+      this.syncRt(); this.postcard(`${p.name} is back aboard. ${p.since}`, 'platform'); this.ev('board', p, c); return null;
+    }
+    const c = passengerAt(st.idx, L.seed);
+    const p = { id: s.nextPid++, kind: c.kind, idx: c.idx, gt: c.gt, name: c.name, mood: opts.mood != null ? opts.mood : 6, tales: 0, board: s.miles, dest: s.miles + 130 + Math.floor(rng(hash('d' + c.idx + L.seed))() * 200), x: sl.x + 0.5, y: sl.y + 0.5, first: { level: opts.level || 'quick', choice: opts.choice || null } };
     s.passengers.push(p); s.metCount = st.idx + 1; L.pending = null;
     if (c.gift && !s.unlocked.includes(c.gift)) { s.unlocked.push(c.gift); this.ev('unlock', c.gift, c); }
-    this.syncRt(); this.ev('board', p, c); return null;
+    this.syncRt(); this.ev('board', p, c); this.addMood(p, 0); return null;
   }
-  decline() { const L = this.s.line; if (!L.pending) return; this.s.metCount = L.pending.idx + 1; L.pending = null; }
+  decline() { const L = this.s.line; if (!L.pending) return; if (L.pending.returning === undefined) this.s.metCount = L.pending.idx + 1; L.pending = null; }
   syncRt() { for (const p of this.s.passengers) if (!this.rt.has(p.id)) this.rt.set(p.id, { state: 'idle', path: [], i: 0, t: 1 + Math.random() * 2, room: null, use: 0, face: 0 }); }
   moodF(p) { return 0.6 + 0.8 * (p.mood / 100); }
   get charmMul() { return 1 + 0.04 * this.s.keepsakes.length; }
@@ -325,6 +347,7 @@ export class Sim {
       if (!L.forkAnnounced) ev.push([forkAt, 'fork']);
       let dep = null; for (const p of s.passengers) if (!dep || p.dest < dep.dest) dep = p;
       if (dep) ev.push([dep.dest, 'depart']);
+      if (s.mail && s.mail.length) ev.push([Math.min(...s.mail.map((x) => x.due)), 'mail']);
       ev.sort((a, b) => a[0] - b[0]);
       const [m, type] = ev[0];
       const step = Math.min(left, Math.max(0, m - s.miles));
@@ -346,22 +369,42 @@ export class Sim {
         this.ev('region', nr);
       } else if (type === 'depart') {
         this.depart(dep);
+      } else if (type === 'mail') {
+        this.deliverMail();
       } else if (type === 'stop') {
         const i = L.stopIndex++, r = rng(hash(`s:${L.seed}:${i}`));
         L.nextStop = m + 11 + r() * 6;
         const name = stopName(L.seed, i), isPass = i === 0 || r() > 0.3;
-        if (isPass) { L.pending = { idx: s.metCount, name, mile: m }; this.ev('stop', L.pending); }
+        if (isPass) {
+          const rr = rng(hash(`ret:${L.seed}:${i}`)), pool = (s.departed || []).map((d, k) => [d, k]).filter(([d]) => !d.back && s.miles - d.at >= 80);
+          if (pool.length && rr() < 0.22) L.pending = { idx: -1, returning: pool[Math.floor(rr() * pool.length)][1], name, mile: m };
+          else L.pending = { idx: s.metCount, name, mile: m };
+          this.ev('stop', L.pending);
+        }
         else { const bonus = 8 + Math.round(r() * 10); s.charm += bonus; this.postcard(`A quick whistle-stop at ${name}. The stationmaster handed up a tin of buttons (+${bonus} Charm).`, name); this.ev('whistle', name, bonus); }
       }
     }
     return dm - left;
   }
   depart(p) {
-    const s = this.s, d = defOf(p);
+    const s = this.s, d = defOf(p), hobby = d.hobby || 'chat', first = p.name.split(' ')[0];
     s.passengers = s.passengers.filter((q) => q !== p); this.rt.delete(p.id);
     s.keepsakes.push({ who: p.name, name: d.keep.name, line: d.keep.line });
+    if (!s.departed) s.departed = []; if (!s.mail) s.mail = [];
+    s.departed.push({ idx: p.idx, kind: p.kind, gt: p.gt, name: p.name, mood: p.mood, tales: p.tales, at: s.miles, back: false, visits: p.visits || 0 });
+    if (s.departed.length > 40) s.departed.shift();
+    const r = rng(hash(`mail:${s.line.seed}:${p.id}`));
+    s.mail.push({ who: p.name, hobby, due: s.miles + 30 + r() * 80, place: stopName(s.line.seed, 200 + p.id), v: Math.floor(r() * 2) });
     this.postcard(`${p.name} stepped off at their stop and left behind ${d.keep.name.toLowerCase()}.`, 'platform');
-    this.ev('depart', { p, keep: d.keep });
+    this.ev('depart', { p, keep: d.keep, farewell: (FAREWELLS[hobby] || FAREWELLS.chat).replace(/\{name\}/g, first) });
+  }
+  deliverMail() {
+    const s = this.s; if (!s.mail || !s.mail.length) return;
+    let k = 0; s.mail.forEach((x, i) => { if (x.due < s.mail[k].due) k = i; });
+    const m = s.mail.splice(k, 1)[0], set = LETTERS[m.hobby] || LETTERS.chat;
+    const card = { id: s.postcards.length, text: set[m.v % set.length].replace(/\{place\}/g, m.place), region: 'a letter', mile: Math.round(s.miles), from: m.who };
+    s.postcards.push(card); if (s.postcards.length > 80) s.postcards.shift();
+    s.lettersGot = (s.lettersGot || 0) + 1; this.ev('letter', card);
   }
   tick(dt) {
     const s = this.s, L = s.line;
@@ -381,7 +424,7 @@ export class Sim {
   }
   loreCtx() {
     const s = this.s;
-    return { miles: s.miles, aboard: s.passengers.length, met: s.metCount, unfolds: s.unfolds, rooms: s.rooms.length, keepsakes: s.keepsakes.length, postcards: s.postcards.length, tickets: s.tickets.length, tales: s.talesHeard || 0, levels: s.rooms.reduce((a, r) => a + (r.lv || 0), 0) };
+    return { miles: s.miles, aboard: s.passengers.length, met: s.metCount, unfolds: s.unfolds, rooms: s.rooms.length, keepsakes: s.keepsakes.length, postcards: s.postcards.length, tickets: s.tickets.length, tales: s.talesHeard || 0, returns: s.returns || 0, letters: s.lettersGot || 0, levels: s.rooms.reduce((a, r) => a + (r.lv || 0), 0) };
   }
   loreProgress(e) {
     const ks = Object.keys(e.need); if (!ks.length) return 1;
