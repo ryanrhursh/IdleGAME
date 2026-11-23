@@ -112,19 +112,39 @@ export const LANDMARKS = [
 ];
 export const POSTCARD_OPEN = ['Passed', 'Saw', 'Rolled by', 'Slowed for'];
 
-// ---------- memories (the mystery of the track) ----------
+// ---------- the storybook: chapters that write themselves as you travel ----------
+// need: what the story is waiting for. Keys: miles, aboard, met, unfolds, rooms, keepsakes, postcards, tickets, tales, levels.
+export const VOLUMES = ['The Marigold', 'The Folk', 'The Line'];
+export const NEED_TEXT = {
+  miles: (n) => `Travel ${n} miles`, aboard: (n) => `Have ${n} ${n === 1 ? 'traveller' : 'travellers'} aboard`, met: (n) => `Meet ${n} ${n === 1 ? 'stranger' : 'strangers'} at stations`,
+  unfolds: (n) => `Unfold the train ${n} ${n === 1 ? 'time' : 'times'}`, rooms: (n) => `Build ${n} rooms`, keepsakes: (n) => `See ${n} ${n === 1 ? 'traveller' : 'travellers'} off at their stop`,
+  postcards: (n) => `Collect ${n} postcards`, tickets: (n) => `Cross into ${n} regions`, tales: (n) => `Hear ${n} tales from your passengers`, levels: (n) => `Furnish rooms to ${n} levels in all`,
+};
 export const LORE = [
-  { id: 'start', title: 'The Marigold', text: 'She is an old train with a charm stitched into her seams. Outside, three carriages. Inside, as much room as you can unfold. No one has ever said who stitched it.', test: () => true },
-  { id: 'track', title: 'The Track', text: 'The rails are only ever a little way ahead of the wheels. When you look back, they are already gone. Whoever lays them knows where you are going.', test: (s) => s.miles >= 10 },
-  { id: 'initials', title: 'Initials', text: 'Every sleeper on the Line has two letters pressed into the end: M. L. They are the same size and the same depth, for as far as anyone has looked.', test: (s) => s.miles >= 60 },
-  { id: 'seat', title: 'The Conductor\'s Seat', text: 'In the engine cab there is a worn seat nobody has been brave enough to sit in. It is warm.', test: (s) => s.passengers.length + s.metCount >= 3 },
-  { id: 'room', title: 'More Room', text: 'The charm is not a trick of space. It is a kindness. The train only unfolds as much as the people on it can use, and always a little more.', test: (s) => s.unfolds >= 3 },
-  { id: 'ghost', title: 'The Other Train', text: 'A train just like yours passes you at dusk, going the other way. The carriages are dark. Every window has a face in it, looking at you.', test: (s) => s.miles >= 140 },
-  { id: 'keep', title: 'What Is Left Behind', text: 'Everyone who gets off leaves something. The train has started to collect it. It does not look like clutter. It looks like a house.', test: (s) => s.keepsakes.length >= 2 },
-  { id: 'letters', title: 'Letters', text: 'The postcards pinned in the dining car are all in the same handwriting. It is yours. You have written them all, on the nights you do not remember.', test: (s) => s.postcards.length >= 12 },
-  { id: 'ends', title: 'Where It Ends', text: 'Everyone asks where the Line ends. The ones who have asked longest have stopped asking and started to wonder where it begins.', test: (s) => s.miles >= 400 },
-  { id: 'ml', title: 'M. L.', text: 'You find a single sleeper with three letters: M. L. B. Someone left a note beneath it: "Welcome back. You laid this one yourself."', test: (s) => s.miles >= 900 },
+  { id: 'start', vol: 0, scene: 'once', title: 'Once Upon a Rail', need: {}, text: 'There was once a small train called the Marigold, and she was far larger inside than out. Nobody remembers who stitched the charm into her seams. Everybody agrees it was done kindly.' },
+  { id: 'cap', vol: 0, scene: 'cap', title: 'The Conductor\'s Cap', need: { miles: 4 }, text: 'On a hook in the cab hung a cap exactly your size. It smelled of coal smoke and oranges. Nobody had told you whose it was, so you wore it, and the engine seemed to settle, as if relieved.' },
+  { id: 'track', vol: 0, scene: 'track', title: 'A Little Way Ahead', need: { miles: 15 }, text: 'The track was only ever laid a short way ahead of the wheels, and was gone a short way behind. The Marigold had never once been lost. She had also never once looked back.' },
+  { id: 'guest', vol: 0, scene: 'guest', title: 'The First Guest', need: { aboard: 1 }, text: 'The first passenger did not ask where the train was going. They asked whether there was tea. That, the Marigold understood at last, was what she was for.' },
+  { id: 'room', vol: 0, scene: 'unfold', title: 'More Room', need: { unfolds: 2 }, text: 'The charm was never a trick of space. It was a kindness. The train unfolds exactly as far as the people aboard can use, and always a little farther, in case someone else is coming.' },
+  { id: 'initials', vol: 0, scene: 'initials', title: 'Two Letters', need: { miles: 70 }, text: 'Every sleeper on the Line has two letters pressed into its end, always the same size and the same depth: M. L. They are not a maker\'s mark. They are more like a signature on a letter someone hoped you would answer.' },
+  { id: 'seat', vol: 0, scene: 'seat', title: 'The Warm Seat', need: { aboard: 3 }, text: 'In the cab there is a worn seat that nobody has been brave enough to sit in. Whenever the train is happiest, the seat is warm, as though someone has only just stood up.' },
+  { id: 'village', vol: 0, scene: 'village', title: 'More Village Than Train', need: { rooms: 8 }, text: 'By now the Marigold was less a train than a village that happened to travel. There were chimneys. There was a garden. There was a clock on the wall that told the right time, but only in the evenings.' },
+  { id: 'keep', vol: 1, scene: 'keep', title: 'What Is Left Behind', need: { keepsakes: 1 }, text: 'When someone steps off at their stop, they leave a small thing: a button, a tune, a way of folding napkins. The train keeps every one. She does not call it clutter. She calls it company.' },
+  { id: 'dinner', vol: 1, scene: 'dinner', title: 'Stories at Dinner', need: { tales: 3 }, text: 'Somewhere between the soup and the second pot of tea, people began to tell the truth. Nobody planned it. The Marigold only dimmed the lamps a little and kept the kettle warm.' },
+  { id: 'glow', vol: 1, scene: 'glow', title: 'The Well-Loved Rooms', need: { levels: 4 }, text: 'A room loved enough begins to glow at the edges. It is not a spell. Rooms simply do this, when enough people have been happy in them, and have said so.' },
+  { id: 'table', vol: 1, scene: 'dinner', title: 'The Long Table', need: { aboard: 6 }, text: 'Six chairs, then eight, then more than the table was long. Nobody ever stood. The Marigold, who has never turned anyone away, rearranged her walls so that no one would have to.' },
+  { id: 'letters', vol: 1, scene: 'letters', title: 'Letters in the Drawer', need: { postcards: 12 }, text: 'In the drawer of the dining car were postcards from places you did not remember visiting. They were all in the same handwriting. It was your own, a little younger, a little braver.' },
+  { id: 'name', vol: 1, scene: 'name', title: 'A Name, Spoken Once', need: { keepsakes: 4 }, text: 'A guest once asked to be called nothing at all, and was. When they left, they said the name aloud, once, to the engine. The Marigold hums it still, very softly, when no one is listening.' },
+  { id: 'regions', vol: 2, scene: 'regions', title: 'Fens and Hills', need: { tickets: 3 }, text: 'The Line was never one place. It was a great many, stitched edge to edge like a quilt, and each had its own weather and its own way of saying hello. The Marigold learned them the way you learn the moods of a friend.' },
+  { id: 'ghost', vol: 2, scene: 'ghost', title: 'The Other Train', need: { miles: 160 }, text: 'At dusk, a train very like yours passed going the other way. The carriages were dark. Every window held a face, and every face looked at you as if it knew you were coming, and was glad.' },
+  { id: 'ladder', vol: 2, scene: 'ladder', title: 'A Ladder to Nowhere', need: { miles: 260 }, text: 'Some things on the Line are simply there: a ladder leaning on nothing, a house with a door in the roof, a cloud tied to a fence. They are not mysteries. They are happier unexplained.' },
+  { id: 'gate', vol: 2, scene: 'gate', title: 'The Gates', need: { tickets: 6 }, text: 'At the edge of every country there is a gate, and every gate has a sign that says Now Entering. In all her years the Marigold had never once been turned back. She had begun to suspect that the gates were put up for her.' },
+  { id: 'ends', vol: 2, scene: 'road', title: 'Where It Ends', need: { miles: 500 }, text: 'Everyone asks where the Line ends. The ones who ask longest stop asking, and start to wonder instead where it begins, and who was standing at the very first sleeper with a hammer and a great deal of hope.' },
+  { id: 'ml', vol: 2, scene: 'initials', title: 'M. L. B.', need: { miles: 1000 }, text: 'On one sleeper, just one, there are three letters instead of two: M. L. B. Beneath it, a note, in your handwriting: "Welcome back. You laid this one yourself."' },
+  { id: 'last', vol: 2, scene: 'last', title: 'There Is No Last Page', need: { miles: 1600, tickets: 10 }, text: 'There is no last page. There is only the next one, still blank, and a pencil left on the windowsill for you. The Marigold waits at the platform with her engine humming. She is in no hurry. She has never been in a hurry.' },
 ];
+// Endless: every new region you cross adds a plate to the book. These lines caption them.
+export const PLATE_LINES = ['where the light came in sideways', 'where the kettle was always just about to boil', 'where the road forgot to turn', 'where the hills leaned in to listen', 'where something was quietly growing', 'where the birds were all facing the same way', 'where the fog made everything polite', 'where the stationmaster waved with his whole arm'];
 
 export const HINTS = [
   'Tap <b>Stoke</b> in time with the needle to build steam. The Line speeds up when she is hot.',

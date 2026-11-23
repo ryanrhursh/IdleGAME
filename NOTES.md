@@ -1,5 +1,13 @@
 # Hand-off notes
 
+## Latest: the storybook look and the writing book
+Storybook is now the default look (Settings > Look switches between five; `?look=` in the address also works).
+The Journal is now a book with five tabs: **Chapters** (21 pages that write themselves as you travel, each with an ink-wash plate and a drop cap;
+blank pages show what unlocks them), **Folk** (portraits and the tales each passenger has told), **Plates** (every region you cross is painted in, endlessly),
+**Postcards** and **Keepsakes**. Crossing into a region shows a chapter banner, a new page shows a tappable slip, and passengers have hand-drawn portraits.
+Please check: do the chapter texts feel like a story you want to read? Is anything too twee, too long, or in the wrong order? Are unlock conditions too slow?
+
+
 State of the game after the overnight build. Branch: `claude/jolly-goodall-vx6xf9`.
 `main` holds the first playable version you tested on your phone; everything below is on the branch only.
 

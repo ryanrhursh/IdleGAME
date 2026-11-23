@@ -26,7 +26,7 @@ export const LOOKS = {
     grade: { sat: 1.05, contrast: 1.22, tint: [1.0, 0.98, 1.04], vig: 0.65, grain: 0.06, tilt: 0, edge: 0, paper: 0 },
   },
 };
-let chosen = 'classic';
+let chosen = 'storybook';
 try {
   const q = new URLSearchParams(location.search).get('look') || localStorage.getItem('marigold.look');
   if (q && LOOKS[q]) chosen = q;

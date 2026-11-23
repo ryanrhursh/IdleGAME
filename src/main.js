@@ -1,8 +1,9 @@
 import { Sim, newState, loadState, fmt, clamp, defOf, passengerAt, regionOf, stopName, landmarkFor, GW, GH } from './logic.js';
 import { World } from './world.js';
 import { Audio } from './audio.js';
-import { ROOMS, LORE, HINTS, HOBBY_ROOM } from './data.js';
-import { LOOK } from './look.js';
+import { ROOMS, LORE, HINTS, HOBBY_ROOM, VOLUMES, NEED_TEXT, PALETTES } from './data.js';
+import { LOOK, LOOKS, LOOK_ID, saveLook } from './look.js';
+import { scene, portrait, plateSwatch } from './scenes.js';
 document.body.dataset.look = LOOK.ui;
 
 const SAVE_KEY = 'marigold.save.v2';
@@ -69,13 +70,30 @@ hooks.stop = (st) => {
 };
 hooks.whistle = (name, bonus) => { toast(`Whistle-stop at <b>${esc(name)}</b>. +${bonus} Charm.`); audio.pop(); };
 hooks.postcard = (c) => { toast(`<i>${esc(c.text)}</i>`); badge('bBook', true); };
-hooks.region = (r) => { toast(`Into the <b>${esc(r.name)}</b>.`); audio.chord(); forkDirty = true; };
+hooks.region = (r) => { showChapter(r); audio.chord(); forkDirty = true; };
 hooks.fork = () => { forkDirty = true; toast('A <b>fork</b> in the Line is coming up. Choose a way.'); audio.whistle(); };
 hooks.board = (p, c) => { toast(`<b>${esc(p.name)}</b> boards. ${esc(c.trait)}.`); audio.chord(); setHint(2); platformDirty = true; };
 hooks.unlock = (type) => toast(`<b>${esc(ROOMS[type].name)}</b> unlocked. You can build one now.`);
 hooks.tale = (p, text) => { toast(`<b>${esc(p.name)}</b> opened up. A new tale is in People.`); badge('bPeople', true); audio.note(9, 0.5); };
 hooks.depart = ({ p, keep }) => { toast(`<b>${esc(p.name)}</b> steps off at their stop and leaves <b>${esc(keep.name)}</b>.`); audio.chord(); };
-hooks.lore = (e) => { if (e.id !== 'start') { toast(`A memory stirs: <b>${esc(e.title)}</b>`); badge('bBook', true); } };
+hooks.lore = (e) => { if (e.id !== 'start') { showPageNote(e); badge('bBook', true); audio.note(11, 0.45); } };
+
+// ---------- storybook touches: chapter banners and new-page slips ----------
+const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII', 'XIII', 'XIV', 'XV', 'XVI', 'XVII', 'XVIII', 'XIX', 'XX'];
+const roman = (n) => (n < ROMAN.length ? ROMAN[n] : String(n));
+const seedOf = (name) => Math.abs(Array.from(String(name)).reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) | 0, 7));
+let chapterTimer = 0, noteTimer = 0;
+function showChapter(r) {
+  const el = $('chapterBanner'), n = (state.plates || []).length;
+  el.innerHTML = `<small>Chapter ${roman(n)}</small><b>${esc(r.name)}</b><i>In which the Marigold finds ${esc(r.hint)}.</i>`;
+  el.hidden = false; el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  clearTimeout(chapterTimer); chapterTimer = setTimeout(() => { el.hidden = true; }, 6200);
+}
+function showPageNote(e) {
+  const b = $('pageNote'); b.dataset.id = e.id; b.innerHTML = `<span>✎ A page has been written</span><b>${esc(e.title)}</b>`; b.hidden = false;
+  clearTimeout(noteTimer); noteTimer = setTimeout(() => { b.hidden = true; }, 10000);
+}
+$('pageNote').onclick = () => { $('pageNote').hidden = true; if (!modalOpen) bookModal($('pageNote').dataset.id); };
 
 // ---------- view switching ----------
 let view = 'line', platformDirty = true, forkDirty = true, sheetDirty = true, sheetMode = null, drawing = null, selRoom = null;
@@ -126,7 +144,7 @@ function stopModal() {
   const st = state.line.pending; if (!st) return;
   const c = passengerAt(st.idx, state.line.seed), free = sim.freeBeds();
   const gift = c.gift && !state.unlocked.includes(c.gift) ? `Brings the know-how for a <b>${esc(ROOMS[c.gift].name)}</b>.` : c.gift ? `Already knows a craft you have: ${esc(ROOMS[c.gift].name)}.` : '';
-  openModal(`<div class="eyebrow">Platform · ${esc(st.name)}</div><h2>${esc(c.name)}</h2>
+  openModal(`<div class="head">${portrait(seedOf(c.name), 76)}<div><div class="eyebrow">Platform · ${esc(st.name)}</div><h2>${esc(c.name)}</h2></div></div>
   <div class="chips"><span class="chip">${esc(c.trait)}</span>${c.hobby ? `<span class="chip">likes: ${esc(c.hobby === 'chat' ? 'good company' : ROOMS[HOBBY_ROOM[c.hobby]].name)}</span>` : ''}</div>
   <div class="quote">${esc(c.line)}</div>
   <p>${gift} Berths free: <b>${free}</b> of ${sim.beds}.</p>
@@ -151,7 +169,7 @@ function peopleModal() {
 }
 function passengerModal(p) {
   if (!p) return; const d = defOf(p), room = sim.rt.get(p.id);
-  openModal(`<div class="eyebrow">${esc(d.trait)}</div><h2>${esc(p.name)}</h2>
+  openModal(`<div class="head">${portrait(seedOf(p.name), 76)}<div><div class="eyebrow">${esc(d.trait)}</div><h2>${esc(p.name)}</h2></div></div>
   <div><small style="color:var(--muted)">Fondness for the train</small>${moodBar(p)}</div>
   <p style="color:var(--muted)">Getting off in about <b style="color:var(--gold)">${Math.max(1, Math.round(p.dest - state.miles))} miles</b>. Likes ${esc(d.hobby === 'chat' ? 'good company' : ROOMS[HOBBY_ROOM[d.hobby]].name)}.</p>
   ${p.trip ? `<p style="color:var(--muted);font-size:13px">Average trip: <b style="color:var(--gold)">${Math.round(p.trip)} steps</b>. ${p.trip <= 6 ? 'Short walks make them happy: +25% Charm.' : p.trip <= 12 ? 'A comfortable walk.' : 'Long walks wear on them. Move their favorite rooms closer to the berths.'}</p>` : ''}
@@ -162,22 +180,52 @@ function passengerModal(p) {
   $('find').onclick = () => { closeModal(); const go = () => { const c = world.inside.controls; c.target.set(p.x, 0, p.y); world.inside.camera.position.set(p.x, 9, p.y + 9); }; if (view !== 'inside') { setView('inside'); setTimeout(go, 260); } else go(); };
 }
 
-// ---------- journal ----------
-function journalModal() {
+// ---------- the storybook ----------
+let bookTab = 'chapters', bookIdx = 0, folkIdx = 0;
+const hex = (n) => '#' + n.toString(16).padStart(6, '0');
+function needLine(e) { return Object.entries(e.need).map(([k, v]) => NEED_TEXT[k](v)).join(' and '); }
+function bookModal(openId) {
   badge('bBook', false);
-  const got = LORE.filter((e) => state.journal.includes(e.id));
-  openModal(`<div class="eyebrow">Conductor's Journal</div><h2>${esc(state.name || 'The Marigold')}</h2>
-  <div class="stats"><div><b>${fmt(state.miles)}</b><small>miles travelled</small></div><div><b>${state.tickets.length}</b><small>regions punched</small></div><div><b>${state.keepsakes.length}</b><small>keepsakes</small></div></div>
-  ${state.tickets.length ? `<div class="eyebrow">Ticket punches</div><div class="chips">${state.tickets.map((t) => `<span class="chip">${esc(t)}</span>`).join('')}</div>` : ''}
-  <div class="eyebrow">Memories</div><ul class="tales">${got.map((e) => `<li><b>${esc(e.title)}.</b> ${esc(e.text)}</li>`).join('')}${got.length < LORE.length ? `<li class="locked">${LORE.length - got.length} memories are still waiting somewhere on the Line.</li>` : ''}</ul>
-  ${state.keepsakes.length ? `<div class="eyebrow">Keepsakes left behind</div><ul class="tales">${state.keepsakes.map((k) => `<li><b>${esc(k.name)}</b>, from ${esc(k.who)}. ${esc(k.line)}</li>`).join('')}</ul>` : ''}
-  <div class="eyebrow">Postcards</div><div class="pcs">${state.postcards.length ? state.postcards.slice().reverse().slice(0, 30).map((c) => `<div class="card-pc">${esc(c.text)}<small>Mile ${c.mile} · ${esc(c.region)}</small></div>`).join('') : '<p style="color:var(--muted)">Postcards turn up as the Line rolls by.</p>'}</div>
-  <div class="row2"><button class="btn ghost" id="x">Close</button></div>`);
+  if (openId) { const i = LORE.findIndex((e) => e.id === openId); if (i >= 0) { bookTab = 'chapters'; bookIdx = i; } }
+  else if (bookTab === 'chapters') { let last = 0; LORE.forEach((e, i) => { if (state.journal.includes(e.id)) last = i; }); bookIdx = Math.min(LORE.length - 1, Math.max(bookIdx, last)); }
+  openModal(`<div class="book"><div class="spine"><span>${esc(state.name || 'The Marigold Line')}</span><small>${state.journal.length} of ${LORE.length} pages written</small></div>
+  <nav class="tabs" role="tablist">${[['chapters', 'Chapters'], ['folk', 'Folk'], ['plates', 'Plates'], ['postcards', 'Postcards'], ['keeps', 'Keepsakes']].map(([k, n]) => `<button role="tab" data-t="${k}" aria-selected="${k === bookTab}">${n}</button>`).join('')}</nav>
+  <div id="pg" class="page"></div><div class="pager" id="pager"></div><div class="row2"><button class="btn ghost" id="x">Close the book</button></div></div>`);
   $('x').onclick = closeModal;
+  modal.querySelectorAll('[data-t]').forEach((b) => { b.onclick = () => { bookTab = b.dataset.t; modal.querySelectorAll('[data-t]').forEach((o) => o.setAttribute('aria-selected', o === b)); renderBook(true); }; });
+  renderBook(false);
+}
+function renderBook(flip) {
+  const pg = $('pg'), pager = $('pager'); let html = '', pagerHtml = '';
+  if (bookTab === 'chapters') {
+    const e = LORE[bookIdx], got = state.journal.includes(e.id), pr = sim.loreProgress(e);
+    html = `<div class="vol">Volume ${roman(e.vol + 1)} · ${esc(VOLUMES[e.vol])}</div><div class="ch">Chapter ${roman(bookIdx + 1)}</div>`
+      + (got ? `<div class="plate">${scene(e.scene)}</div><h3>${esc(e.title)}</h3><p class="dropcap">${esc(e.text)}</p>`
+        : `<div class="plate blank"><span>❦</span></div><h3>A page not yet written</h3><p class="hintline">${esc(needLine(e))}, and the page will write itself.</p><div class="bar"><i style="width:${Math.round(pr * 100)}%"></i></div>`);
+    pagerHtml = `<button id="pv" ${bookIdx <= 0 ? 'disabled' : ''} aria-label="Previous page">‹</button><span>Page ${bookIdx + 1} of ${LORE.length}</span><button id="nx" ${bookIdx >= LORE.length - 1 ? 'disabled' : ''} aria-label="Next page">›</button>`;
+  } else if (bookTab === 'folk') {
+    const ps = state.passengers; folkIdx = Math.min(folkIdx, Math.max(0, ps.length - 1));
+    if (!ps.length) html = '<div class="vol">The Folk</div><h3>No one is aboard</h3><p class="dropcap">When someone steps onto the Marigold, their page is started here, and it fills in as they feel at home.</p>';
+    else { const p = ps[folkIdx], d = defOf(p); html = `<div class="vol">The Folk</div><div class="folkhead">${portrait(seedOf(p.name), 84)}<div><h3>${esc(p.name)}</h3><p class="trait">${esc(d.trait)}</p><p class="trait">Off in about ${Math.max(1, Math.round(p.dest - state.miles))} miles</p></div></div>${d.tales.map((t, i) => `<p class="${i < p.tales ? 'tale' : 'tale blankline'}">${i < p.tales ? esc(t) : 'Not yet told.'}</p>`).join('')}`; }
+    pagerHtml = ps.length > 1 ? `<button id="pv" ${folkIdx <= 0 ? 'disabled' : ''}>‹</button><span>${folkIdx + 1} of ${ps.length}</span><button id="nx" ${folkIdx >= ps.length - 1 ? 'disabled' : ''}>›</button>` : '';
+  } else if (bookTab === 'plates') {
+    const pl = (state.plates || []).slice().reverse();
+    html = `<div class="vol">Plates</div><p class="intro">Each region you cross is painted into the book. There is always another.</p><div class="plates">${pl.map((x) => { const P = PALETTES[x.pal] || PALETTES[0]; return `<figure>${plateSwatch(hex(P.sky[0]), hex(P.sky[1]), hex(P.ground), hex(P.tint), x.weather)}<figcaption><b>${esc(x.name)}</b><span>${esc(x.line)}</span><small>Mile ${x.mile}</small></figcaption></figure>`; }).join('')}</div>`;
+  } else if (bookTab === 'postcards') {
+    html = `<div class="vol">Postcards</div><div class="pcs">${state.postcards.length ? state.postcards.slice().reverse().slice(0, 40).map((c) => `<div class="card-pc">${esc(c.text)}<small>Mile ${c.mile} · ${esc(c.region)}</small></div>`).join('') : '<p class="intro">Postcards turn up as the Line rolls by.</p>'}</div>`;
+  } else {
+    html = `<div class="vol">Keepsakes</div>${state.keepsakes.length ? `<ul class="keeps">${state.keepsakes.map((k) => `<li><b>${esc(k.name)}</b><span>left by ${esc(k.who)}. ${esc(k.line)}</span></li>`).join('')}</ul>` : '<p class="intro">When someone steps off at their stop, they leave a small thing behind. It will be kept here.</p>'}`;
+  }
+  pg.innerHTML = html; pager.innerHTML = pagerHtml; pager.hidden = !pagerHtml; pg.scrollTop = 0;
+  if (flip) { pg.classList.remove('flip'); void pg.offsetWidth; pg.classList.add('flip'); }
+  const pv = $('pv'), nx = $('nx');
+  if (pv) pv.onclick = () => { if (bookTab === 'chapters') bookIdx--; else folkIdx--; audio.pop(); renderBook(true); };
+  if (nx) nx.onclick = () => { if (bookTab === 'chapters') bookIdx++; else folkIdx++; audio.pop(); renderBook(true); };
 }
 function menuModal() {
   openModal(`<div class="eyebrow">Settings</div><h2>The Marigold Line</h2>
   <div class="row2"><button class="btn ghost" id="snd">Sound: ${audio.enabled ? 'on' : 'off'}</button><button class="btn ghost" id="rc">Recentre the view</button></div>
+  <div class="row2"><button class="btn ghost" id="look">Look: ${esc(LOOK.name)} (change)</button></div>
   <div class="row2"><button class="btn ghost" id="gfx">Graphics: ${({ low: 'Low (faster)', high: 'High', undefined: 'Auto' })[state.gfx]}</button></div>
   <div class="row2"><button class="btn ghost" id="auto">While I'm away, welcome travellers: ${state.auto ? 'yes' : 'no'}</button></div>
   <div><small style="color:var(--muted)">Name your train</small><input type="text" id="tn" maxlength="24" value="${esc(state.name)}" placeholder="The Marigold"></div>
@@ -187,6 +235,7 @@ function menuModal() {
   $('snd').onclick = (e) => { audio.enabled = !audio.enabled; state.sound = audio.enabled; audio.apply(); e.target.textContent = 'Sound: ' + (audio.enabled ? 'on' : 'off'); };
   $('rc').onclick = () => { world.line.recentre(world.aspect); world.inside.fit(world.aspect); closeModal(); };
   $('auto').onclick = (e) => { state.auto = !state.auto; e.target.textContent = `While I'm away, welcome travellers: ${state.auto ? 'yes' : 'no'}`; };
+  $('look').onclick = () => { const ids = Object.keys(LOOKS), next = ids[(ids.indexOf(LOOK_ID) + 1) % ids.length]; save(); saveLook(next); location.href = location.pathname + location.hash; };
   $('gfx').onclick = (e) => { const order = [undefined, 'low', 'high'], i = (order.indexOf(state.gfx) + 1) % 3; state.gfx = order[i]; world.setGfx(state.gfx || 'auto'); e.target.textContent = 'Graphics: ' + ({ low: 'Low (faster)', high: 'High', undefined: 'Auto' })[state.gfx]; };
   $('tn').onchange = (e) => { state.name = e.target.value.trim().slice(0, 24); };
   $('exp').onclick = async () => { save(); const code = btoa(unescape(encodeURIComponent(JSON.stringify(state)))); try { await navigator.clipboard.writeText(code); toast('Save code copied.'); } catch (e) { $('io').innerHTML = `<input type="text" readonly value="${code}" onfocus="this.select()">`; } };
@@ -194,15 +243,15 @@ function menuModal() {
   $('rst').onclick = (e) => { if (e.target.dataset.sure) { try { localStorage.removeItem(SAVE_KEY); } catch (er) { /* ignore */ } state.last = 0; location.reload(); } else { e.target.dataset.sure = 1; e.target.textContent = 'Really erase everything?'; } };
 }
 $('bPeople').onclick = () => { if (!modalOpen) peopleModal(); };
-$('bBook').onclick = () => { if (!modalOpen) journalModal(); };
+$('bBook').onclick = () => { if (!modalOpen) bookModal(); };
 $('menuBtn').onclick = () => { if (!modalOpen) menuModal(); };
 
 function introModal() {
-  openModal(`<div class="eyebrow">The Marigold Line</div><h2>A small train that is much larger on the inside.</h2>
-  <p>She has three carriages and one tired engine. Someone long ago stitched a charm into her seams, so that every room on board is as big as the people in it need.</p>
-  <p>The track appears only a little way ahead of the wheels. People wait at stations. Some of them will stay a while and fill the rooms you make. Some will leave something behind.</p>
-  <p>You are the conductor. Nothing here ever needs rushing.</p>
-  <div class="row2"><button class="btn" id="begin">All aboard</button></div>`, () => { setHint(0); });
+  openModal(`<div class="book intro"><div class="plate">${scene('once')}</div><div class="vol">A story, begun</div><h2>Once Upon a Rail</h2>
+  <p class="dropcap">There was once a small train called the Marigold, and she was far larger inside than out. Someone long ago had stitched a charm into her seams, so that every room on board was exactly as big as the people in it needed.</p>
+  <p>The track appeared only a little way ahead of her wheels. People waited at stations. Some of them stayed a while and filled the rooms you made. Some of them left something behind.</p>
+  <p>You are the conductor. The book you are holding writes itself as you go. Nothing here ever needs rushing.</p>
+  <div class="row2"><button class="btn" id="begin">Turn the page</button></div></div>`, () => { setHint(0); showChapter(sim.region()); });
   $('begin').onclick = closeModal;
 }
 function awayModal(rep) {

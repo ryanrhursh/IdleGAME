@@ -1,5 +1,5 @@
 // Game rules and simulation for the Marigold Line. No rendering code lives here.
-import { ROOMS, HOBBY_ROOM, PASSENGERS, GEN_FIRST, GEN_LAST, GEN_TYPES, REGION_ADJ, REGION_NOUN, STOP_A, STOP_B, PALETTES, WEATHER, HINT_WORDS, LANDMARKS, POSTCARD_OPEN, LORE } from './data.js';
+import { ROOMS, HOBBY_ROOM, PASSENGERS, GEN_FIRST, GEN_LAST, GEN_TYPES, REGION_ADJ, REGION_NOUN, STOP_A, STOP_B, PALETTES, WEATHER, HINT_WORDS, LANDMARKS, POSTCARD_OPEN, LORE, PLATE_LINES } from './data.js';
 
 export const GW = 24, GH = 16;
 export const BASE_SPEED = 0.12; // miles per second at idle pressure
@@ -63,7 +63,7 @@ export function newState(now = Date.now()) {
     grid: { x0: 6, y0: 4, x1: 15, y1: 9 },
     rooms: [{ id: 1, type: 'sleeper', x: 6, y: 4, w: 3, h: 3 }, { id: 2, type: 'dining', x: 9, y: 4, w: 4, h: 3 }, { id: 3, type: 'corridor', x: 6, y: 7, w: 10, h: 1 }],
     nextRoom: 4, unlocked: ['sleeper', 'dining', 'parlor', 'corridor'],
-    passengers: [], nextPid: 1, keepsakes: [], postcards: [], tickets: [], journal: [],
+    passengers: [], nextPid: 1, keepsakes: [], postcards: [], tickets: [], plates: [], talesHeard: 0, journal: [],
     line: { seed: Math.floor(Math.random() * 1e9), region: 'M', regionStart: 0, nextStop: 2.5, stopIndex: 0, nextLandmark: 7, forkChosen: null, forkAnnounced: false, pending: null },
     hint: 0, auto: false, sound: true, name: '', paintSeen: false,
   };
@@ -250,7 +250,7 @@ export class Sim {
   addMood(p, v) {
     p.mood = clamp(p.mood + v, 0, 100);
     const d = defOf(p), th = [30, 60, 90];
-    while (p.tales < 3 && p.mood >= th[p.tales]) { p.tales++; this.ev('tale', p, d.tales[p.tales - 1]); }
+    while (p.tales < 3 && p.mood >= th[p.tales]) { p.tales++; this.s.talesHeard = (this.s.talesHeard || 0) + 1; this.ev('tale', p, d.tales[p.tales - 1]); }
   }
   occupancy(rid) { let n = 0; for (const [, r] of this.rt) if (r.room === rid && (r.state === 'use' || r.state === 'walk')) n++; return n; }
   pickRoom(p) {
@@ -341,6 +341,7 @@ export class Sim {
         L.region = L.region + side; L.regionStart = m; L.forkChosen = null; L.forkAnnounced = false;
         const nr = regionOf(L.region);
         if (!s.tickets.includes(nr.name)) s.tickets.push(nr.name);
+        this.addPlate(nr);
         this.postcard(`Crossed into the ${nr.name}. The air smells of ${nr.hint}.`, nr.name);
         this.ev('region', nr);
       } else if (type === 'depart') {
@@ -372,9 +373,26 @@ export class Sim {
     for (const p of s.passengers) this.updateP(p, dt);
     this.t.lore += dt; if (this.t.lore > 2) { this.t.lore = 0; this.checkProgress(); }
   }
+  addPlate(reg) {
+    const s = this.s; if (!s.plates) s.plates = [];
+    if (s.plates.some((p) => p.id === reg.id)) return;
+    const r = rng(hash('plate:' + reg.id));
+    s.plates.push({ id: reg.id, name: reg.name, pal: reg.pal, weather: reg.weather, line: PLATE_LINES[Math.floor(r() * PLATE_LINES.length)], mile: Math.round(s.miles) });
+  }
+  loreCtx() {
+    const s = this.s;
+    return { miles: s.miles, aboard: s.passengers.length, met: s.metCount, unfolds: s.unfolds, rooms: s.rooms.length, keepsakes: s.keepsakes.length, postcards: s.postcards.length, tickets: s.tickets.length, tales: s.talesHeard || 0, levels: s.rooms.reduce((a, r) => a + (r.lv || 0), 0) };
+  }
+  loreProgress(e) {
+    const ks = Object.keys(e.need); if (!ks.length) return 1;
+    const c = this.loreCtx(); return ks.reduce((a, k) => a + Math.min(1, c[k] / e.need[k]), 0) / ks.length;
+  }
   checkProgress() {
-    const s = this.s, ctx = { miles: s.miles, passengers: s.passengers, metCount: s.metCount, unfolds: s.unfolds, keepsakes: s.keepsakes, postcards: s.postcards };
-    for (const e of LORE) if (!s.journal.includes(e.id) && e.test(ctx)) { s.journal.push(e.id); this.ev('lore', e); }
+    const s = this.s;
+    if (!s.plates) s.plates = [];
+    if (!s.tickets.includes(this.region().name)) s.tickets.push(this.region().name);
+    this.addPlate(this.region());
+    for (const e of LORE) if (!s.journal.includes(e.id) && this.loreProgress(e) >= 1) { s.journal.push(e.id); this.ev('lore', e); }
   }
 
   // ---------- away ----------

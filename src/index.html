@@ -10,6 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="Marigold">
 <title>The Marigold Line</title>
 <style>
+@import url('https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&display=swap');
 :root {
   --bg: #120c22; --glass: rgba(26, 18, 42, .8); --glass2: rgba(40, 28, 62, .92); --line: rgba(255, 214, 160, .16);
   --fg: #f8eedd; --muted: #bcaccb; --gold: #f2b134; --gold-ink: #2c1a04; --teal: #6fe0d0; --rose: #ff8aa6; --bad: #ff7a7a; --good: #7dffb0;
@@ -181,6 +182,51 @@ body[data-look="cinema"] .btn { border-radius: 4px; text-transform: uppercase; l
 body[data-look="cinema"] .quote { font-family: var(--display); font-weight: 300; border-left: 1px solid var(--gold); }
 body[data-look="cinema"] #dock button[aria-pressed="true"] { background: transparent; color: var(--gold); box-shadow: inset 0 -2px 0 var(--gold); border-radius: 0; }
 
+
+/* ---------- the storybook ---------- */
+#chapterBanner { position: fixed; left: 50%; transform: translateX(-50%); top: calc(var(--sat) + 74px); width: min(420px, calc(100vw - 28px)); text-align: center; display: grid; gap: 2px; pointer-events: none; padding: 12px 18px 14px; background: #f7ecd4; color: #3a2616; border: 2px solid #8a5a34; border-radius: 6px 16px 8px 18px; box-shadow: 3px 5px 0 rgba(60, 36, 20, .5); font-family: "IM Fell English", Georgia, serif; z-index: 8; }
+#chapterBanner.show { animation: chap 6.2s ease-out forwards; }
+#chapterBanner small { font: 600 11px var(--ui); letter-spacing: .22em; text-transform: uppercase; color: #b84a1c; }
+#chapterBanner b { font-size: 24px; font-weight: 400; font-style: italic; line-height: 1.15; }
+#chapterBanner i { font-size: 14px; color: #6a4a2e; }
+@keyframes chap { 0% { opacity: 0; transform: translate(-50%, -12px) rotate(-1deg); } 8% { opacity: 1; transform: translate(-50%, 0) rotate(0); } 86% { opacity: 1; } 100% { opacity: 0; } }
+#pageNote { position: fixed; left: 50%; transform: translateX(-50%); top: calc(var(--sat) + 74px); width: min(380px, calc(100vw - 28px)); display: grid; gap: 1px; text-align: center; padding: 9px 16px 10px; background: #fbf1d8; color: #3a2616; border: 2px solid #b84a1c; border-radius: 4px 14px 6px 16px; box-shadow: 2px 4px 0 rgba(60, 36, 20, .5); font-family: "IM Fell English", Georgia, serif; z-index: 21; animation: slip .5s ease-out; cursor: pointer; }
+#pageNote span { font: 600 11px var(--ui); letter-spacing: .14em; text-transform: uppercase; color: #b84a1c; }
+#pageNote b { font-size: 19px; font-weight: 400; font-style: italic; }
+@keyframes slip { from { opacity: 0; transform: translate(-50%, -14px) rotate(1.5deg); } }
+body[data-look="storybook"] { --display: "IM Fell English", "Iowan Old Style", Palatino, Georgia, serif; --ui: "IM Fell English", "Iowan Old Style", Palatino, Georgia, serif; }
+body[data-look="storybook"] .pill b { font-weight: 400; }
+body[data-look="storybook"] #dock button, body[data-look="storybook"] .btn, body[data-look="storybook"] .tool { font-family: "IM Fell English", Georgia, serif; font-size: 15px; letter-spacing: .01em; }
+.head { display: flex; gap: 14px; align-items: center; } .head h2 { font-size: 24px; } .head .portrait { flex: none; filter: drop-shadow(1px 2px 0 rgba(60,36,20,.35)); }
+.book { display: grid; gap: 12px; }
+.book .spine { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; border-bottom: 2px double rgba(90, 58, 34, .5); padding-bottom: 8px; }
+.book .spine span { font: 400 22px/1.1 var(--display); font-style: italic; } .book .spine small { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.book .tabs { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 2px; }
+.book .tabs button { flex: none; padding: 6px 12px; border-radius: 4px 4px 0 0; border: 1px solid rgba(90, 58, 34, .35); border-bottom: 0; background: rgba(138, 90, 52, .12); font: 400 15px var(--display); color: var(--muted); }
+.book .tabs button[aria-selected="true"] { background: #fbf1d8; color: var(--fg); font-weight: 700; box-shadow: 0 2px 0 #fbf1d8; position: relative; top: 1px; }
+.book .page { background: #fbf1d8; border: 1px solid rgba(90, 58, 34, .35); border-radius: 2px 8px 8px 2px; padding: 16px 16px 18px; min-height: 280px; max-height: 52vh; overflow: auto; display: grid; gap: 10px; align-content: start; box-shadow: inset 6px 0 10px -6px rgba(90, 58, 34, .35); touch-action: pan-y; transform-origin: left center; }
+.book .page.flip { animation: flip .38s ease-out; }
+@keyframes flip { from { opacity: .2; transform: perspective(900px) rotateY(-24deg); } }
+.book .vol { font: 600 11px var(--ui); letter-spacing: .2em; text-transform: uppercase; color: #b84a1c; } .book .ch { font: 400 14px var(--display); font-style: italic; color: var(--muted); margin-top: -6px; }
+.book h3 { margin: 0; font: 400 26px/1.15 var(--display); font-style: italic; }
+.book .plate { border: 2px solid #3a2616; border-radius: 3px; overflow: hidden; box-shadow: 2px 3px 0 rgba(60, 36, 20, .35); line-height: 0; } .book .plate svg { width: 100%; height: auto; display: block; }
+.book .plate.blank { background: repeating-linear-gradient(135deg, rgba(138, 90, 52, .08) 0 6px, transparent 6px 12px); aspect-ratio: 300 / 170; display: grid; place-items: center; border-style: dashed; color: rgba(90, 58, 34, .35); font-size: 48px; }
+.book p { margin: 0; color: #4a3220; font: 400 17px/1.55 var(--display); max-width: 60ch; }
+.book .dropcap::first-letter { float: left; font: 400 56px/.85 var(--display); color: #b84a1c; padding: 4px 8px 0 0; }
+.book .hintline { font-style: italic; color: #7a5a3a; } .book .intro { font-style: italic; color: #7a5a3a; }
+.book .folkhead { display: flex; gap: 14px; align-items: center; } .book .trait { font-size: 14px; color: #7a5a3a; font-style: italic; }
+.book .tale { padding-left: 12px; border-left: 3px solid #b84a1c; } .book .blankline { border-left-color: rgba(90, 58, 34, .25); color: rgba(90, 58, 34, .4); font-style: italic; }
+.book .plates { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.book .plates figure { margin: 0; display: grid; gap: 6px; } .book .plates figure svg { width: 100%; height: auto; border-radius: 3px; display: block; box-shadow: 2px 3px 0 rgba(60, 36, 20, .3); }
+.book .plates figcaption { display: grid; gap: 1px; font: 400 14px/1.3 var(--display); color: #4a3220; } .book .plates figcaption b { font-size: 17px; font-weight: 400; font-style: italic; color: #3a2616; } .book .plates figcaption small { color: #8a6a4a; }
+.book .keeps { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; } .book .keeps li { display: grid; gap: 1px; border-bottom: 1px dotted rgba(90, 58, 34, .4); padding-bottom: 8px; font-family: var(--display); } .book .keeps b { font-size: 18px; font-weight: 400; font-style: italic; color: #3a2616; } .book .keeps span { color: #6a4a2e; font-size: 15px; }
+.book .pager { display: flex; justify-content: center; align-items: center; gap: 16px; font-family: var(--display); color: var(--muted); }
+.book .pager button { width: 44px; height: 38px; border-radius: 4px 12px 4px 12px; border: 1.5px solid #8a5a34; background: #fbf1d8; font-size: 24px; line-height: 1; color: #3a2616; } .book .pager button[disabled] { opacity: .3; }
+.book.intro p { color: var(--fg); }
+.book.intro { gap: 14px; } .book.intro h2 { font: 400 32px/1.1 var(--display); font-style: italic; }
+body:not([data-look="storybook"]) .book .page, body:not([data-look="storybook"]) .book .p { color: #3a2616; }
+body:not([data-look="storybook"]) .book .spine small, body:not([data-look="storybook"]) .book .tabs button { color: #6a4a2e; }
+
 @media (prefers-reduced-motion: reduce) { .float, .toast, #platform { animation-duration: .01s; animation-iteration-count: 1; } }
 @media (max-height: 560px) { #sheet { max-height: 46vh; } #hint { display: none; } }
 </style>
@@ -195,6 +241,8 @@ body[data-look="cinema"] #dock button[aria-pressed="true"] { background: transpa
   <button id="menuBtn" aria-label="Menu">&#9776;</button>
 </div>
 
+<div id="chapterBanner" hidden></div>
+<button id="pageNote" hidden></button>
 <div id="fork" hidden></div>
 <button id="platform" hidden></button>
 <div id="hint" hidden></div>

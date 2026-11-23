@@ -68,6 +68,10 @@ s.charm = 5000; const rm = s.rooms.find((r) => r.type === 'dining'); const lvBef
 ok(sim.upgrade(rm.id) === null && rm.lv === lvBefore + 1, 'furnish raises the room level');
 ok(sim.upgradeCost(rm) > cost1, 'each level costs more than the last');
 sim.restyle(rm.id); ok(rm.style === 1, 'restyle cycles the colors');
+// the storybook writes itself
+sim.checkProgress(); ok(s.journal.includes('start'), 'the first chapter is there from the beginning');
+ok(s.plates.length >= 3, `regions you cross become plates in the book (${s.plates.length})`);
+const prog = sim.loreProgress({ need: { miles: 10000 } }); ok(prog >= 0 && prog < 1, 'progress toward a locked chapter is a fraction');
 // save round trip
 const back = loadState(JSON.stringify(s)); ok(back && back.rooms.length === s.rooms.length, 'save round-trips');
 console.log(fails ? `${fails} FAILED` : 'all passed'); process.exit(fails ? 1 : 0);
