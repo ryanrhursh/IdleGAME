@@ -16,6 +16,8 @@ let state = null, fresh = false;
 try { state = loadState(localStorage.getItem(SAVE_KEY)); } catch (e) { state = null; }
 if (!state) { state = newState(); fresh = true; }
 const AFK_MS = 30 * 60 * 1000;
+const CTL_LABEL = { both: 'stick + tap', tap: 'tap to walk', stick: 'joystick' };
+if (!state.controlsSet) state.controls = matchMedia('(hover: hover) and (pointer: fine)').matches ? 'tap' : 'both';   // phones get the stick and tap-to-walk together
 if (state.mode === 'journey' && Date.now() - (state.lastInput || 0) > AFK_MS) state.mode = 'afk';
 const audio = new Audio(); audio.enabled = state.sound !== false;
 const hooks = {};
@@ -69,7 +71,7 @@ function mouseUi() {
   $('cross').hidden = !(j && (journey.locked || journey.hover));
   $('lockHint').hidden = !(j && !journey.locked && !journey.hover && !state.lockSeen);
 }
-function applyControls() { mouseUi(); $('stick').hidden = !(view === 'journey' && state.controls === 'stick'); }
+function applyControls() { mouseUi(); $('stick').hidden = !(view === 'journey' && state.controls !== 'tap'); }
 function renderDuties() {
   const el = $('duties'); if (view !== 'journey') { el.hidden = true; return; }
   const J = state.jobs.list;
@@ -177,7 +179,7 @@ $('modeBtn').onclick = () => { if (!modalOpen) setGameMode(state.mode === 'journ
 function journeyIntro() {
   openModal(`<div class="head">${portrait(7, 76)}<div><div class="eyebrow">Journey mode</div><h2>The conductor on foot</h2></div></div>
   <p class="dropcap">You can walk the Marigold yourself. Stand among your passengers, hear their tales in person, and see to the small duties that keep a train warm.</p>
-  <p>${state.controls === 'stick' ? 'Use the stick to walk and drag the screen to look.' : 'Tap anywhere on the floor to walk there, and drag to look around.'} On a computer, click the view to look around with your mouse (press Esc to let go and use the buttons), and use W A S D and E. Gold lights mark what your duties need.</p>
+  <p>${state.controls === 'stick' ? 'Use the stick to walk and drag the screen to look.' : state.controls === 'both' ? 'Use the stick to walk, drag the screen to look, or just tap the floor to walk there.' : 'Tap anywhere on the floor to walk there, and drag to look around.'} On a computer, click the view to look around with your mouse (press Esc to let go and use the buttons), and use W A S D and E. Gold lights mark what your duties need.</p>
   <p>While you are walking your train, it earns a quarter more, and each finished duty pays Charm. Step back to AFK at any time and she will run herself, steady and calm. After half an hour without a touch, she does it for you.</p>
   <div class="row2"><button class="btn" id="go">Take the cap</button></div>`);
   $('go').onclick = closeModal;
@@ -349,7 +351,7 @@ function menuModal() {
   <div class="row2"><button class="btn ghost" id="snd">Sound: ${audio.enabled ? 'on' : 'off'}</button><button class="btn ghost" id="rc">Recentre the view</button></div>
   <div class="slider"><label for="sens">Look sensitivity <b id="sensVal">${(clamp(+state.sens || 1, 0.25, 2)).toFixed(2)}\u00d7</b></label><input type="range" id="sens" min="0.25" max="2" step="0.05" value="${clamp(+state.sens || 1, 0.25, 2)}"></div>
   <div class="row2"><button class="btn ghost" id="ml">Mouse look: ${state.mouselook === false ? 'off' : 'on'} (change)</button></div>
-  <div class="row2"><button class="btn ghost" id="ctl">Walking: ${state.controls === 'stick' ? 'joystick' : 'tap to walk'} (change)</button></div>
+  <div class="row2"><button class="btn ghost" id="ctl">Walking: ${CTL_LABEL[state.controls] || 'tap to walk'} (change)</button></div>
   <div class="row2"><button class="btn ghost" id="look">Look: ${esc(LOOK.name)} (change)</button></div>
   <div class="row2"><button class="btn ghost" id="gfx">Graphics: ${({ low: 'Low (faster)', high: 'High', undefined: 'Auto' })[state.gfx]}</button></div>
   <div class="row2"><button class="btn ghost" id="auto">While I'm away, welcome travellers: ${state.auto ? 'yes' : 'no'}</button></div>
@@ -362,7 +364,7 @@ function menuModal() {
   $('auto').onclick = (e) => { state.auto = !state.auto; e.target.textContent = `While I'm away, welcome travellers: ${state.auto ? 'yes' : 'no'}`; };
   $('sens').oninput = (e) => { const v = clamp(+e.target.value, 0.25, 2); state.sens = v; journey.sens = v; $('sensVal').textContent = v.toFixed(2) + '\u00d7'; };
   $('ml').onclick = (e) => { state.mouselook = state.mouselook === false; e.target.textContent = `Mouse look: ${state.mouselook === false ? 'off' : 'on'} (change)`; if (state.mouselook === false) journey.releaseLock(); mouseUi(); };
-  $('ctl').onclick = (e) => { state.controls = state.controls === 'stick' ? 'tap' : 'stick'; e.target.textContent = `Walking: ${state.controls === 'stick' ? 'joystick' : 'tap to walk'} (change)`; applyControls(); };
+  $('ctl').onclick = (e) => { state.controls = { both: 'tap', tap: 'stick', stick: 'both' }[state.controls] || 'both'; state.controlsSet = true; e.target.textContent = `Walking: ${CTL_LABEL[state.controls]} (change)`; applyControls(); };
   $('look').onclick = () => { const ids = Object.keys(LOOKS), next = ids[(ids.indexOf(LOOK_ID) + 1) % ids.length]; save(); saveLook(next); location.href = location.pathname + location.hash; };
   $('gfx').onclick = (e) => { const order = [undefined, 'low', 'high'], i = (order.indexOf(state.gfx) + 1) % 3; state.gfx = order[i]; world.setGfx(state.gfx || 'auto'); e.target.textContent = 'Graphics: ' + ({ low: 'Low (faster)', high: 'High', undefined: 'Auto' })[state.gfx]; };
   $('tn').onchange = (e) => { state.name = e.target.value.trim().slice(0, 24); };
@@ -479,7 +481,7 @@ canvas.addEventListener('pointerdown', (e) => {
 });
 canvas.addEventListener('pointermove', (e) => {
   if (!ptr || ptr.id !== e.pointerId) return;
-  if (Math.hypot(e.clientX - ptr.x, e.clientY - ptr.y) > 9) ptr.moved = true;
+  if (Math.hypot(e.clientX - ptr.x, e.clientY - ptr.y) > (e.pointerType === 'touch' ? 16 : 9)) ptr.moved = true;
   if (view === 'journey') { if (ptr.moved && !journey.locked) journey.turn(e.clientX - ptr.lx, e.clientY - ptr.ly); ptr.lx = e.clientX; ptr.ly = e.clientY; return; }
   if (drawing && view === 'inside') updateDraw(e.clientX, e.clientY);
 });
@@ -490,7 +492,7 @@ canvas.addEventListener('pointerup', (e) => {
       if (journey.locked) journey.tapCenter(); else if (!journey.hover) journey.requestLock(); else if (!p.moved && e.timeStamp - p.t < 450) journey.tap(e.clientX, e.clientY);
       return;
     }
-    if (!p.moved && e.timeStamp - p.t < 450) journey.tap(e.clientX, e.clientY);
+    if (!p.moved && e.timeStamp - p.t < 600) journey.tap(e.clientX, e.clientY);
     return;
   }
   if (drawing && view === 'inside') { commitDraw(); return; }

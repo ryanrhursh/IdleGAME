@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { clamp, SPOT_JOBS, firstOf } from './logic.js';
 
-const EYE = 0.6, SPEED = 1.9, REACH = 1.45;
+const EYE = 0.6, SPEED = 2.3, REACH = 1.45;
 
 export class Journey {
   constructor(world, sim, ui) {
@@ -22,7 +22,7 @@ export class Journey {
     // on-screen joystick
     const st = document.getElementById('stick'), knob = document.getElementById('knob');
     if (st) {
-      const move = (e) => { const r = st.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2, R = r.width / 2; let dx = (e.clientX - cx) / R, dy = (e.clientY - cy) / R; const l = Math.hypot(dx, dy); if (l > 1) { dx /= l; dy /= l; } this.stick.x = dx; this.stick.y = dy; knob.style.transform = `translate(${dx * R * 0.55}px, ${dy * R * 0.55}px)`; };
+      const move = (e) => { const r = st.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2, R = r.width / 2; let dx = (e.clientX - cx) / R, dy = (e.clientY - cy) / R; const l = Math.hypot(dx, dy); if (l > 1) { dx /= l; dy /= l; } const m = Math.hypot(dx, dy), dz = 0.14, k = m < dz ? 0 : (m - dz) / (1 - dz) / (m || 1); this.stick.x = dx * k; this.stick.y = dy * k; knob.style.transform = `translate(${dx * R * 0.55}px, ${dy * R * 0.55}px)`; };
       st.addEventListener('pointerdown', (e) => { this.stick.id = e.pointerId; st.setPointerCapture(e.pointerId); this.path = []; this.goal = null; move(e); e.preventDefault(); });
       st.addEventListener('pointermove', (e) => { if (e.pointerId === this.stick.id) move(e); });
       const end = (e) => { if (e.pointerId !== this.stick.id) return; this.stick.id = null; this.stick.x = this.stick.y = 0; knob.style.transform = ''; };
@@ -118,9 +118,15 @@ export class Journey {
   }
 
   // ----- moving -----
-  walkTo(tx, tz, then) {
+  walkTo(tx, tz, then, quiet) {
     const sim = this.sim, p = sim.path(Math.floor(this.x), Math.floor(this.z), tx, tz);
-    if (!p) return false; this.path = p.slice(1).map((k) => ({ x: (k % 24) + 0.5, z: Math.floor(k / 24) + 0.5 })); this.goal = then || null; return true;
+    if (!p) return false;
+    const pts = p.slice(1).map((k) => ({ x: (k % 24) + 0.5, z: Math.floor(k / 24) + 0.5 }));
+    // pull the string tight: skip any waypoint we can already walk straight past, so the route is a few smooth legs instead of tile-to-tile zigzags
+    const clear = (ax, az, bx, bz) => { const d = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(d / 0.1)); for (let i = 1; i <= n; i++) if (!sim.canStand(ax + ((bx - ax) * i) / n, az + ((bz - az) * i) / n, 0.2)) return false; return true; };
+    const out = []; let cx = this.x, cz = this.z, i = 0;
+    while (i < pts.length) { let j = pts.length - 1; while (j > i && !clear(cx, cz, pts[j].x, pts[j].z)) j--; out.push(pts[j]); cx = pts[j].x; cz = pts[j].z; i = j + 1; }
+    this.path = out; this.goal = then || null; this.dest = { x: tx, z: tz, then: then || null }; if (!quiet) this.repaths = 0; return true;
   }
   tap(cx, cy) {
     // an object or person on screen?
@@ -148,10 +154,14 @@ export class Journey {
     if (f || sd) {
       const l = Math.hypot(f, sd) || 1; f /= Math.max(1, l); sd /= Math.max(1, l);
       mx = (-Math.sin(this.yaw) * f + Math.cos(this.yaw) * sd) * SPEED * dt; mz = (-Math.cos(this.yaw) * f - Math.sin(this.yaw) * sd) * SPEED * dt;
+    } else if (this.path.length && this.goal && Math.hypot(this.goal.it.x - this.x, this.goal.it.z - this.z) < 0.95) {   // close enough to the person or thing you walked to
+      const g = this.goal; this.goal = null; this.path = []; this.interact(g);
     } else if (this.path.length) {
       const t = this.path[0], dx = t.x - this.x, dz = t.z - this.z, d = Math.hypot(dx, dz);
-      if (d < 0.08) { this.path.shift(); if (!this.path.length && this.goal) { const g = this.goal; this.goal = null; if (Math.hypot(g.it.x - this.x, g.it.z - this.z) < REACH + 0.3) this.interact(g); } }
-      else { const st = Math.min(SPEED * dt, d); mx = (dx / d) * st; mz = (dz / d) * st; const want = Math.atan2(-dx, -dz); let dy = ((want - this.yaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI; this.yaw += dy * Math.min(1, dt * 4); }
+      if (d < 0.12) { this.path.shift(); if (!this.path.length && this.goal) { const g = this.goal; this.goal = null; if (Math.hypot(g.it.x - this.x, g.it.z - this.z) < REACH + 0.3) this.interact(g); } }
+      else { const want = Math.atan2(-dx, -dz); let dy = ((want - this.yaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+        this.yaw += clamp(dy, -7 * dt, 7 * dt);                                    // turn first, quickly, then walk where you look
+        const st = Math.min(SPEED * dt, d) * clamp(1.15 - Math.abs(dy) / 0.9, 0.15, 1); mx = (dx / d) * st; mz = (dz / d) * st; }
     }
     let moved = false;
     if (mx || mz) {
@@ -160,7 +170,10 @@ export class Journey {
         const dx = nx - q.x, dz = nz - q.y, d = Math.hypot(dx, dz), min = 0.36;
         if (d < min && d > 1e-4) { const px = nx + (dx / d) * (min - d), pz = nz + (dz / d) * (min - d); if (sim.canStand(px, pz)) { nx = px; nz = pz; } else { nx = this.x; nz = this.z; } }
       }
-      if (nx === this.x && nz === this.z) this.path = [];
+      if (nx === this.x && nz === this.z && this.path.length && !(f || sd)) {   // something is in the way: wait a beat, then find another way round
+        this.block = (this.block || 0) + dt;
+        if (this.block > 0.4) { this.block = 0; const d = this.dest; this.path = []; if (d && (this.repaths || 0) < 16) { this.repaths = (this.repaths || 0) + 1; this.walkTo(d.x, d.z, d.then, true); } }
+      } else if (nx === this.x && nz === this.z) this.path = []; else this.block = 0;
       moved = Math.hypot(nx - this.x, nz - this.z) > 1e-4; this.x = nx; this.z = nz; if (moved) this.bob += dt * 9;
     }
     sim.conductor = { x: this.x, z: this.z };

@@ -1,5 +1,10 @@
 # Hand-off notes
 
+## Latest: smoother walking in Journey
+- Phones now get the joystick **and** tap-to-walk together by default (Menu > Walking cycles stick + tap / tap only / stick only; desktop stays tap-only).
+- Tap-to-walk takes smooth straight legs instead of tile-to-tile zigzags, turns toward the goal quickly before moving, stops and interacts as soon as you are in reach of the person or thing, and waits and re-routes if a passenger is in the way instead of giving up.
+- Walking speed 1.9 to 2.3, joystick dead zone, and a looser tap threshold for fingers (16 px, 600 ms).
+
 ## Latest: the look (storybook polish)
 - **Inside:** every room now has its own wallpaper tint (instance colours on a striped, flowered, dado-railed wallpaper texture); door posts everywhere and lintels in first person; framed pictures on about a third of the walls in sleepers, dining cars, parlors, corridors and the music room (first person only, never over a window); round rugs under dining tables and a rug and potted plant in sleepers.
 - **Outside:** telegraph poles with wire running beside the track, round bushes at the track edge (tinted by the region palette), drifting clouds, and a few birds. These sit outside the region-weight system, so existing worlds are unchanged.
@@ -74,6 +79,7 @@ State of the game after the overnight build. Branch: `claude/jolly-goodall-vx6xf
 - [ ] Sound: tap once, then check the chuff, whistle and chime sounds are pleasant, and the Sound toggle works.
 - [ ] Add to Home Screen, open from the icon. Full screen? Does the save carry over?
 - [ ] Fork: do you notice the signs and the choice banner? Is it clear what the choice does?
+- [ ] Journey walking on your phone: is the stick comfortable (position, size, speed)? Does tap-to-walk go where you point? Anything still clunky? Tell me which part.
 - [ ] The look: does the inside feel cosier in first person (wallpaper, frames, door posts)? Do poles and bushes outside add life or clutter? Frame rate on your phone vs before (Settings > Graphics: Low still works)?
 - [ ] Richer passengers: do wishes feel like a gentle goal or like homework? Is the reveal (mood 30) timed well? Does the wistful farewell land?
 - [ ] Friends and rivals: do the stop-card hints ("would get on well with / might clash with") make inviting feel like a choice? Does "talk to them" in Journey make peace clearly enough?
