@@ -112,19 +112,44 @@ export const LANDMARKS = [
 ];
 export const POSTCARD_OPEN = ['Passed', 'Saw', 'Rolled by', 'Slowed for'];
 
-// ---------- memories (the mystery of the track) ----------
+// ---------- the storybook: chapters that write themselves as you travel ----------
+// need: what the story is waiting for. Keys: miles, aboard, met, unfolds, rooms, keepsakes, postcards, tickets, tales, levels.
+export const VOLUMES = ['The Marigold', 'The Folk', 'The Line'];
+export const NEED_TEXT = {
+  miles: (n) => `Travel ${n} miles`, aboard: (n) => `Have ${n} ${n === 1 ? 'traveller' : 'travellers'} aboard`, met: (n) => `Meet ${n} ${n === 1 ? 'stranger' : 'strangers'} at stations`,
+  unfolds: (n) => `Unfold the train ${n} ${n === 1 ? 'time' : 'times'}`, rooms: (n) => `Build ${n} rooms`, keepsakes: (n) => `See ${n} ${n === 1 ? 'traveller' : 'travellers'} off at their stop`,
+  returns: (n) => `Welcome back ${n} ${n === 1 ? 'old friend' : 'old friends'}`, letters: (n) => `Receive ${n} ${n === 1 ? 'letter' : 'letters'} from people who have left`, postcards: (n) => `Collect ${n} postcards`, tickets: (n) => `Cross into ${n} regions`, tales: (n) => `Hear ${n} tales from your passengers`, levels: (n) => `Furnish rooms to ${n} levels in all`,
+};
 export const LORE = [
-  { id: 'start', title: 'The Marigold', text: 'She is an old train with a charm stitched into her seams. Outside, three carriages. Inside, as much room as you can unfold. No one has ever said who stitched it.', test: () => true },
-  { id: 'track', title: 'The Track', text: 'The rails are only ever a little way ahead of the wheels. When you look back, they are already gone. Whoever lays them knows where you are going.', test: (s) => s.miles >= 10 },
-  { id: 'initials', title: 'Initials', text: 'Every sleeper on the Line has two letters pressed into the end: M. L. They are the same size and the same depth, for as far as anyone has looked.', test: (s) => s.miles >= 60 },
-  { id: 'seat', title: 'The Conductor\'s Seat', text: 'In the engine cab there is a worn seat nobody has been brave enough to sit in. It is warm.', test: (s) => s.passengers.length + s.metCount >= 3 },
-  { id: 'room', title: 'More Room', text: 'The charm is not a trick of space. It is a kindness. The train only unfolds as much as the people on it can use, and always a little more.', test: (s) => s.unfolds >= 3 },
-  { id: 'ghost', title: 'The Other Train', text: 'A train just like yours passes you at dusk, going the other way. The carriages are dark. Every window has a face in it, looking at you.', test: (s) => s.miles >= 140 },
-  { id: 'keep', title: 'What Is Left Behind', text: 'Everyone who gets off leaves something. The train has started to collect it. It does not look like clutter. It looks like a house.', test: (s) => s.keepsakes.length >= 2 },
-  { id: 'letters', title: 'Letters', text: 'The postcards pinned in the dining car are all in the same handwriting. It is yours. You have written them all, on the nights you do not remember.', test: (s) => s.postcards.length >= 12 },
-  { id: 'ends', title: 'Where It Ends', text: 'Everyone asks where the Line ends. The ones who have asked longest have stopped asking and started to wonder where it begins.', test: (s) => s.miles >= 400 },
-  { id: 'ml', title: 'M. L.', text: 'You find a single sleeper with three letters: M. L. B. Someone left a note beneath it: "Welcome back. You laid this one yourself."', test: (s) => s.miles >= 900 },
+  { id: 'start', vol: 0, scene: 'once', title: 'Once Upon a Rail', need: {}, text: 'There was once a small train called the Marigold, and she was far larger inside than out. Nobody remembers who stitched the charm into her seams. Everybody agrees it was done kindly.' },
+  { id: 'cap', vol: 0, scene: 'cap', title: 'The Conductor\'s Cap', need: { miles: 4 }, text: 'On a hook in the cab hung a cap exactly your size. It smelled of coal smoke and oranges. Nobody had told you whose it was, so you wore it, and the engine seemed to settle, as if relieved.' },
+  { id: 'track', vol: 0, scene: 'track', title: 'A Little Way Ahead', need: { miles: 15 }, text: 'The track was only ever laid a short way ahead of the wheels, and was gone a short way behind. The Marigold had never once been lost. She had also never once looked back.' },
+  { id: 'guest', vol: 0, scene: 'guest', title: 'The First Guest', need: { aboard: 1 }, text: 'The first passenger did not ask where the train was going. They asked whether there was tea. That, the Marigold understood at last, was what she was for.' },
+  { id: 'room', vol: 0, scene: 'unfold', title: 'More Room', need: { unfolds: 2 }, text: 'The charm was never a trick of space. It was a kindness. The train unfolds exactly as far as the people aboard can use, and always a little farther, in case someone else is coming.' },
+  { id: 'initials', vol: 0, scene: 'initials', title: 'Two Letters', need: { miles: 70 }, text: 'Every sleeper on the Line has two letters pressed into its end, always the same size and the same depth: M. L. They are not a maker\'s mark. They are more like a signature on a letter someone hoped you would answer.' },
+  { id: 'seat', vol: 0, scene: 'seat', title: 'The Warm Seat', need: { aboard: 3 }, text: 'In the cab there is a worn seat that nobody has been brave enough to sit in. Whenever the train is happiest, the seat is warm, as though someone has only just stood up.' },
+  { id: 'village', vol: 0, scene: 'village', title: 'More Village Than Train', need: { rooms: 8 }, text: 'By now the Marigold was less a train than a village that happened to travel. There were chimneys. There was a garden. There was a clock on the wall that told the right time, but only in the evenings.' },
+  { id: 'keep', vol: 1, scene: 'keep', title: 'What Is Left Behind', need: { keepsakes: 1 }, text: 'When someone steps off at their stop, they leave a small thing: a button, a tune, a way of folding napkins. The train keeps every one. She does not call it clutter. She calls it company.' },
+  { id: 'mail', vol: 1, scene: 'letters', title: 'The Post Car', need: { letters: 1 }, text: 'Nobody can say how it reaches the Marigold, since she has no address, but a letter arrived from someone who had stepped off at a station long ago. It began, "Dear conductor, I hope the train is well." It ended, "I am."' },
+  { id: 'return', vol: 1, scene: 'guest', title: 'A Familiar Face', need: { returns: 1 }, text: 'The platform was crowded, but you knew the one in the middle at once, because they were waving with the whole of their arm. They had changed, a little, the way people do when something has gone well. The Marigold slowed, and did not mind being late.' },
+  { id: 'log1', vol: 0, scene: 'cap', title: 'The Conductor\'s Log', need: { jobs: 1 }, text: 'In the cab you found a log, and in the log, a first line already written in a hand you almost knew: "Do one small thing well, and the train notices." You did one small thing. The page below it, a little embarrassed, wrote itself.' },
+  { id: 'log2', vol: 1, scene: 'dinner', title: 'Small Duties', need: { jobs: 8 }, text: 'Pouring tea, carrying the post bag, picking up a dropped glove. None of it is grand. The Marigold has always run on this kind of thing: a great many small kindnesses, done on foot, by someone who stayed.' },
+  { id: 'log3', vol: 2, scene: 'seat', title: 'What the Cap Remembers', need: { jobs: 25 }, text: 'On the twenty-fifth page of the log there is a drawing of the Marigold, and beside it, in the margin: "Thank you for walking her." The cap on the hook is warm. It is, you notice, very slightly too small, as though it has been waiting for someone younger. Or someone who has just begun.' },
+  { id: 'dinner', vol: 1, scene: 'dinner', title: 'Stories at Dinner', need: { tales: 3 }, text: 'Somewhere between the soup and the second pot of tea, people began to tell the truth. Nobody planned it. The Marigold only dimmed the lamps a little and kept the kettle warm.' },
+  { id: 'glow', vol: 1, scene: 'glow', title: 'The Well-Loved Rooms', need: { levels: 4 }, text: 'A room loved enough begins to glow at the edges. It is not a spell. Rooms simply do this, when enough people have been happy in them, and have said so.' },
+  { id: 'table', vol: 1, scene: 'dinner', title: 'The Long Table', need: { aboard: 6 }, text: 'Six chairs, then eight, then more than the table was long. Nobody ever stood. The Marigold, who has never turned anyone away, rearranged her walls so that no one would have to.' },
+  { id: 'letters', vol: 1, scene: 'letters', title: 'Letters in the Drawer', need: { postcards: 12 }, text: 'In the drawer of the dining car were postcards from places you did not remember visiting. They were all in the same handwriting. It was your own, a little younger, a little braver.' },
+  { id: 'name', vol: 1, scene: 'name', title: 'A Name, Spoken Once', need: { keepsakes: 4 }, text: 'A guest once asked to be called nothing at all, and was. When they left, they said the name aloud, once, to the engine. The Marigold hums it still, very softly, when no one is listening.' },
+  { id: 'regions', vol: 2, scene: 'regions', title: 'Fens and Hills', need: { tickets: 3 }, text: 'The Line was never one place. It was a great many, stitched edge to edge like a quilt, and each had its own weather and its own way of saying hello. The Marigold learned them the way you learn the moods of a friend.' },
+  { id: 'ghost', vol: 2, scene: 'ghost', title: 'The Other Train', need: { miles: 160 }, text: 'At dusk, a train very like yours passed going the other way. The carriages were dark. Every window held a face, and every face looked at you as if it knew you were coming, and was glad.' },
+  { id: 'ladder', vol: 2, scene: 'ladder', title: 'A Ladder to Nowhere', need: { miles: 260 }, text: 'Some things on the Line are simply there: a ladder leaning on nothing, a house with a door in the roof, a cloud tied to a fence. They are not mysteries. They are happier unexplained.' },
+  { id: 'gate', vol: 2, scene: 'gate', title: 'The Gates', need: { tickets: 6 }, text: 'At the edge of every country there is a gate, and every gate has a sign that says Now Entering. In all her years the Marigold had never once been turned back. She had begun to suspect that the gates were put up for her.' },
+  { id: 'ends', vol: 2, scene: 'road', title: 'Where It Ends', need: { miles: 500 }, text: 'Everyone asks where the Line ends. The ones who ask longest stop asking, and start to wonder instead where it begins, and who was standing at the very first sleeper with a hammer and a great deal of hope.' },
+  { id: 'ml', vol: 2, scene: 'initials', title: 'M. L. B.', need: { miles: 1000 }, text: 'On one sleeper, just one, there are three letters instead of two: M. L. B. Beneath it, a note, in your handwriting: "Welcome back. You laid this one yourself."' },
+  { id: 'last', vol: 2, scene: 'last', title: 'There Is No Last Page', need: { miles: 1600, tickets: 10 }, text: 'There is no last page. There is only the next one, still blank, and a pencil left on the windowsill for you. The Marigold waits at the platform with her engine humming. She is in no hurry. She has never been in a hurry.' },
 ];
+// Endless: every new region you cross adds a plate to the book. These lines caption them.
+export const PLATE_LINES = ['where the light came in sideways', 'where the kettle was always just about to boil', 'where the road forgot to turn', 'where the hills leaned in to listen', 'where something was quietly growing', 'where the birds were all facing the same way', 'where the fog made everything polite', 'where the stationmaster waved with his whole arm'];
 
 export const HINTS = [
   'Tap <b>Stoke</b> in time with the needle to build steam. The Line speeds up when she is hot.',
@@ -132,3 +157,86 @@ export const HINTS = [
   'Open <b>Inside</b>. The train is bigger in there than it looks. Build rooms by dragging on the floor.',
   'Passengers walk your layout. The closer their favorite rooms, the happier they are, and the more Charm they bring.',
 ];
+
+// ---------- meeting people: the optional conversation at a stop ----------
+export const TALK = {
+  warm: { label: 'Offer tea and a seat', sub: 'A cup, a warm corner' },
+  curious: { label: 'Ask where they are headed, and why', sub: 'Listen properly' },
+  space: { label: 'Show them somewhere quiet', sub: 'No questions yet' },
+};
+// What a person quietly gives away, so an attentive conductor can read them.
+export const TELLS = {
+  warm: ['{name} keeps glancing toward the kettle on your cab stove.', '{name} is holding a coat that is clearly a size too thin for the weather.'],
+  curious: ['{name} is reading every sign on the platform, twice.', '{name} has asked the stationmaster three questions before the train finished stopping.'],
+  space: ['{name} stands a little apart from the crowd, as if listening to something far off.', '{name} holds the strap of a bag very tightly, and says very little.'],
+};
+// REPLIES[how well you read them][what you did]
+export const REPLIES = {
+  delighted: {
+    warm: '{name} laughs, and the tension goes out of their shoulders. "Tea. Of course. How did you know?"',
+    curious: '{name} brightens like a lamp. "No one ever asks why. Sit, and I will tell you all of it."',
+    space: '{name} lets out a breath they seem to have held since the last station. "Yes. That is exactly what I needed."',
+  },
+  warm: {
+    warm: '{name} accepts the cup with both hands. "That is kind. Thank you."',
+    curious: '{name} considers it. "Somewhere ahead. For reasons. But thank you for asking."',
+    space: '{name} nods slowly. "A quiet corner would be welcome."',
+  },
+  polite: {
+    warm: '{name} takes the tea, and sets it down very politely. "Thank you. Perhaps later."',
+    curious: '{name} gives a small, careful smile. "It is a long story. Perhaps after supper."',
+    space: '{name} glances around the corridor. "Lovely. Although, I think I would like company, actually."',
+  },
+};
+export const RAPPORT_TEXT = { delighted: 'You read them well.', warm: 'A kind start.', polite: 'A gentle start.', quick: 'A quick welcome.' };
+
+// ---------- what happens after they leave ----------
+export const FAREWELLS = {
+  garden: '{name} presses a seed into your palm. "Plant it where it is least expected."',
+  library: '{name} slides a bookmark between two pages of the Journal. "For when you lose your place."',
+  workshop: '{name} taps the boiler gauge twice, fondly. "She will be fine. She was always going to be fine."',
+  observatory: '{name} points at the ceiling, which is somehow also the sky. "That one. Look for it tonight."',
+  bath: '{name} leaves a small, warm towel on the rail. "In case anyone is cold. Someone always is."',
+  music: '{name} hums three notes at the door, and the engine hums the fourth. "There. Now it is finished."',
+  aquarium: '{name} taps the tank glass once, gently. "Look after one another."',
+  chat: '{name} shakes your hand a moment longer than people usually do. "Good company is rarer than it looks."',
+};
+export const LETTERS = {
+  garden: ['Dear conductor, I planted the first seed by the {place} gate. Something is already coming up. It looks like hope, which is what I hoped it would look like.', 'Dear conductor, the orchard at {place} is in leaf. A child asked me what the tallest tree was called. I said it had not decided.'],
+  library: ['Dear conductor, I found a small library at {place}, and told them what I know about putting books in order. They put the books in a circle. It works better.', 'Dear conductor, I have been reading the same chapter aloud to the {place} ferrymen. They do not agree on the ending. I am delighted.'],
+  workshop: ['Dear conductor, I mended the clock at {place} station. It chimed for the first time in thirty years. Nobody knew what time it was, but everyone was glad.', 'Dear conductor, there is a hinge at {place} that squeaks in tune. I left it alone.'],
+  observatory: ['Dear conductor, from {place} the sky looks very much like the one from your windows. I take that to mean we are all under the same one.', 'Dear conductor, I found a very small star at {place} that I think is shy. I have not told anyone.'],
+  bath: ['Dear conductor, there is a hot spring at {place}. I have asked it to be patient and it has agreed to stay warm until you come.', 'Dear conductor, I opened a bathhouse at {place}. The first customer stayed three days and has written a poem.'],
+  music: ['Dear conductor, I sang in the square at {place}. A dog joined in. It was the best duet of my career.', 'Dear conductor, the station at {place} has an echo that answers a half-beat late. I am teaching it a song.'],
+  aquarium: ['Dear conductor, I dropped a line in the lake at {place}. Nothing bit. I count it a very good morning.', 'Dear conductor, the pond at {place} has a fish that waves. Gerald would have approved.'],
+  chat: ['Dear conductor, I told the whole of {place} about the Marigold. Half of them did not believe me. The other half are waiting at the platform.', 'Dear conductor, I have found a bench at {place} that seats exactly the number of people I wanted to talk to. It is a good bench.'],
+};
+export const RETURN_LINES = {
+  garden: 'Their orchard has come into bloom, and they have brought a cutting for the garden room.',
+  library: 'They have started a small lending library, and they are back with the first overdue book.',
+  workshop: 'They are back with a new wrench, and a plan for a better hinge on the aisle door.',
+  observatory: 'They found the star they were looking for. It was a lot smaller than expected, and exactly right.',
+  bath: 'Their bathhouse is full every night now. They are back for a week of doing nothing at all.',
+  music: 'They have finished the song. They are back to sing it to the one who first asked for it.',
+  aquarium: 'They have a new fish, and a very good story about it.',
+  chat: 'They are back with news from six towns and a gift for each of you.',
+};
+
+// things passengers say when you stop to talk and they have no new tale to tell
+export const CHAT_LINES = [
+  '{name} tells you about the weather in a place you have never been, and makes it sound like a friend.',
+  '{name} asks if you have ever noticed how the lamps lean toward whoever is sad. You have.',
+  '{name} shows you a button they found in their pocket and cannot account for. "A souvenir," they decide.',
+  '{name} says the train sounds different tonight. Happier. Or perhaps that is the tea.',
+  '{name} hums a few bars of something and apologises. You ask for the rest.',
+  '{name} says the best part of any journey is the part nobody planned.',
+  '{name} wonders aloud how far a train can go if it never once looks back. Then smiles. "Further than I thought."',
+  '{name} offers you half a biscuit and an opinion about the dining car. You accept both.',
+];
+export const JOB_FLAVOR = {
+  tea: ['A pot of tea has gone cold in the dining car, and three people are too polite to say so.'],
+  checkin: ['A train is only as warm as the people on it. Go and see how they are.'],
+  post: ['A bag of post has been waiting by the conductor\'s post for a day. Someone is expecting it.'],
+  tidy: ['A room has been well loved, which is to say, a little untidy.'],
+  stoke: ['The boiler is feeling shy. A bit of coal and a bit of company will bring her round.'],
+};

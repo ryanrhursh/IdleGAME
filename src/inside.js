@@ -3,13 +3,15 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { ROOMS } from './data.js';
 import { GW, GH, rng, hash, clamp } from './logic.js';
+import { LOOK } from './look.js';
 import { toon, basic, glowSprite, mesh, G, box, cyl, sph, cone, makeFigure, gearGeometry } from './gfx.js';
 
 const FLOOR_H = 0.1;
+const STYLES = [[1, 1, 1], [1.25, 1.0, 0.8], [0.8, 1.0, 1.3], [1.3, 0.8, 1.1]];
 
 function stitchTexture() {
   const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
-  g.fillStyle = '#241a3c'; g.fillRect(0, 0, 128, 128);
+  g.fillStyle = LOOK.inside.plate; g.fillRect(0, 0, 128, 128);
   g.strokeStyle = 'rgba(190,160,230,0.28)'; g.lineWidth = 2; g.setLineDash([6, 6]);
   g.strokeRect(6, 6, 116, 116); g.beginPath(); g.moveTo(64, 6); g.lineTo(64, 122); g.moveTo(6, 64); g.lineTo(122, 64); g.stroke();
   const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set((GW + 6) / 2, (GH + 6) / 2); t.colorSpace = THREE.SRGBColorSpace; return t;
@@ -90,16 +92,17 @@ export class InsideView {
   constructor(world) {
     this.world = world; this.sim = world.sim;
     const scene = this.scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x120c22); scene.fog = new THREE.FogExp2(0x120c22, 0.012);
+    scene.background = new THREE.Color(LOOK.inside.bg); scene.fog = new THREE.FogExp2(LOOK.inside.bg, 0.012 * LOOK.fogMul);
     this.camera = new THREE.PerspectiveCamera(40, 1, 0.5, 300);
-    scene.add(new THREE.HemisphereLight(0xffe8d8, 0x4a3a6a, 1.5)); const dl = new THREE.DirectionalLight(0xfff0d8, 1.3); dl.position.set(-6, 14, 8); scene.add(dl);
+    scene.add(new THREE.HemisphereLight(LOOK.inside.sky, LOOK.inside.ground, LOOK.inside.hemi)); const dl = new THREE.DirectionalLight(LOOK.inside.sun, LOOK.inside.sunI); dl.position.set(-4, 16, 22); dl.target.position.set(12, 0, 8); scene.add(dl); scene.add(dl.target);
+    if (LOOK.shadows) { dl.castShadow = true; dl.shadow.mapSize.set(2048, 2048); const c = dl.shadow.camera; c.left = -20; c.right = 20; c.top = 18; c.bottom = -18; c.near = 2; c.far = 70; dl.shadow.bias = -0.0008; dl.shadow.normalBias = 0.04; dl.shadow.radius = 4; }
     // the folded cloth the pocket sits on
     const tex = stitchTexture();
     this.plate = mesh(G.box, new THREE.MeshToonMaterial({ map: tex, color: 0xffffff, gradientMap: null }), GW / 2, -0.45, GH / 2, GW + 6, 0.4, GH + 6); scene.add(this.plate);
     this.platform = mesh(G.box, toon(0xd9c9a8), GW / 2, -0.17, GH / 2, 1, 0.3, 1); scene.add(this.platform);
     this.pt = { x: 0, z: 0, w: 1, d: 1 }; this.ptTarget = { x: 0, z: 0, w: 1, d: 1 }; this.setPlatformTarget(true);
-    this.floors = new THREE.InstancedMesh(G.box, new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: null }), GW * GH); this.floors.frustumCulled = false; this.floors.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(GW * GH * 3), 3); scene.add(this.floors);
-    this.walls = new THREE.InstancedMesh(G.box, toon(0xe9dcc4), 700); this.walls.frustumCulled = false; scene.add(this.walls);
+    this.floors = new THREE.InstancedMesh(G.box, new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: null }), GW * GH); this.floors.frustumCulled = false; this.floors.receiveShadow = LOOK.shadows; this.floors.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(GW * GH * 3), 3); scene.add(this.floors);
+    this.walls = new THREE.InstancedMesh(G.box, toon(0xe9dcc4), 700); this.walls.frustumCulled = false; this.walls.castShadow = this.walls.receiveShadow = LOOK.shadows; scene.add(this.walls);
     this.doors = new THREE.InstancedMesh(G.box, toon(0xd0a248, { emissive: 0x3a2a08 }), 200); this.doors.frustumCulled = false; scene.add(this.doors);
     this.gridLines = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xb8a888, transparent: true, opacity: 0.55 })); scene.add(this.gridLines);
     this.propGroups = new Map(); this.figures = new Map();
@@ -108,13 +111,19 @@ export class InsideView {
     this.selRoom = null;
     // dust motes
     const n = 90, pos = new Float32Array(n * 3), R = rng(5); this.dust = []; for (let i = 0; i < n; i++) this.dust.push([R() * GW, R() * 5 + 1, R() * GH, R() * 6.28]);
-    const dg = new THREE.BufferGeometry(); dg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); this.dustPts = new THREE.Points(dg, new THREE.PointsMaterial({ size: 0.12, color: 0xffe0b0, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending, map: null })); this.dustPts.frustumCulled = false; scene.add(this.dustPts);
+    const dg = new THREE.BufferGeometry(); dg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); this.dustPts = new THREE.Points(dg, new THREE.PointsMaterial({ size: 0.12, color: 0xffe0b0, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending, map: null })); this.dustPts.frustumCulled = false; scene.add(this.dustPts); if (LOOK.grade && LOOK.grade.edge > 0) this.dustPts.visible = false;
     // sparkle burst for unfolding
     this.sparks = []; this.sparkGroup = new THREE.Group(); scene.add(this.sparkGroup);
     // controls
     const c = this.controls = new OrbitControls(this.camera, world.canvas);
     c.enablePan = true; c.screenSpacePanning = false; c.enableDamping = true; c.dampingFactor = 0.1; c.minDistance = 6; c.maxDistance = 60; c.minPolarAngle = 0.45; c.maxPolarAngle = 1.2; c.minAzimuthAngle = -0.8; c.maxAzimuthAngle = 0.8; c.rotateSpeed = 0.5; c.panSpeed = 0.9;
     c.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE }; c.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE }; c.enabled = false;
+    // first-person (journey) camera, ceiling, lamps and in-person props
+    this.jcam = new THREE.PerspectiveCamera(74, 1, 0.03, 120); this.journey = false;
+    this.ceiling = mesh(G.box, new THREE.MeshToonMaterial({ color: 0x6a4a38, gradientMap: null, side: THREE.DoubleSide }), 0, FLOOR_H + 1.32, 0, 1, 0.06, 1); this.ceiling.castShadow = false; this.ceiling.visible = false; scene.add(this.ceiling);
+    this.lamps = new THREE.Group(); this.lamps.visible = false; scene.add(this.lamps);
+    this.jprops = new THREE.Group(); this.jprops.visible = false; scene.add(this.jprops);
+    this.markerSprites = [];
     this.built = -1; this.lastUnfold = 0; this.dummy = new THREE.Object3D(); this.col = new THREE.Color();
   }
   setPlatformTarget(instant) {
@@ -133,16 +142,17 @@ export class InsideView {
       const def = ROOMS[r.type], rr = rng(r.id);
       for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) {
         d.position.set(x + 0.5, FLOOR_H / 2, y + 0.5); d.scale.set(1, FLOOR_H, 1); d.rotation.set(0, 0, 0); d.updateMatrix(); this.floors.setMatrixAt(i, d.matrix);
-        this.col.setHex((x + y) % 2 ? def.floor : def.floor2); this.floors.setColorAt(i, this.col); i++;
+        this.col.setHex((x + y) % 2 ? def.floor : def.floor2); const st = STYLES[r.style || 0]; this.col.r = Math.min(1, this.col.r * st[0]); this.col.g = Math.min(1, this.col.g * st[1]); this.col.b = Math.min(1, this.col.b * st[2]); this.floors.setColorAt(i, this.col); i++;
       }
     }
     this.floors.count = i; this.floors.instanceMatrix.needsUpdate = true; this.floors.instanceColor.needsUpdate = true;
     // walls
     i = 0;
+    const WH = this.journey ? 1.25 : 0.56;
     for (const w of sim.walls) {
       let x = w.x + 0.5, z = w.y + 0.5, sx = 1.08, sz = 0.1;
       if (w.side === 'n') z = w.y; else if (w.side === 's') z = w.y + 1; else { x = w.side === 'w' ? w.x : w.x + 1; sx = 0.1; sz = 1.08; }
-      d.position.set(x, FLOOR_H + 0.28, z); d.scale.set(sx, 0.56, sz); d.rotation.set(0, 0, 0); d.updateMatrix(); this.walls.setMatrixAt(i++, d.matrix);
+      d.position.set(x, FLOOR_H + WH / 2, z); d.scale.set(sx, WH, sz); d.rotation.set(0, 0, 0); d.updateMatrix(); this.walls.setMatrixAt(i++, d.matrix);
     }
     this.walls.count = i; this.walls.instanceMatrix.needsUpdate = true;
     // doors
@@ -160,16 +170,20 @@ export class InsideView {
     // furniture
     const alive = new Set();
     for (const r of s.rooms) {
-      const key = `${r.id}:${r.type}:${r.w}x${r.h}`; alive.add(r.id);
+      const key = `${r.id}:${r.type}:${r.w}x${r.h}:${r.lv || 0}`; alive.add(r.id);
       const old = this.propGroups.get(r.id);
       if (old && old.userData.key === key) continue;
       if (old) { this.scene.remove(old); this.propGroups.delete(r.id); }
       const grp = new THREE.Group(); grp.userData.key = key; grp.position.set(r.x, FLOOR_H, r.y);
       const R = rng(hash(key)); BUILDERS[r.type](grp, r.w, r.h, R);
+      const lv = Math.min(r.lv || 0, 8);
+      for (let k = 0; k < lv * 2; k++) { const gl = glowSprite(k % 2 ? 0xffd890 : 0xff9ac0, 0.5, 0.9); gl.position.set(((k + 0.5) / (lv * 2)) * r.w, 0.62 + (k % 2) * 0.05, 0.06); grp.add(gl); grp.add(sph(0xfff0b0, ((k + 0.5) / (lv * 2)) * r.w, 0.6 + (k % 2) * 0.05, 0.06, 0.07, 0.07, 0.07, { emissive: 0xffe0a0, emissiveIntensity: 1.6 })); }
       if (r.born && Date.now() - r.born < 3000) grp.userData.born = performance.now();
       this.scene.add(grp); this.propGroups.set(r.id, grp);
     }
     for (const [id, grp] of this.propGroups) if (!alive.has(id)) { this.scene.remove(grp); this.propGroups.delete(id); }
+    while (this.lamps.children.length) this.lamps.remove(this.lamps.children[0]);
+    for (const r of s.rooms) { const gl = glowSprite(0xffd890, 2.4, 0.75); gl.position.set(r.x + r.w / 2, FLOOR_H + 1.12, r.y + r.h / 2); this.lamps.add(gl); this.lamps.add(sph(0xfff0b0, r.x + r.w / 2, FLOOR_H + 1.18, r.y + r.h / 2, 0.1, 0.1, 0.1, { emissive: 0xffe0a0, emissiveIntensity: 1.6 })); }
     this.updateSel();
     if (sim.lastUnfold && sim.lastUnfold.t !== this.lastUnfold) { this.lastUnfold = sim.lastUnfold.t; this.burst(sim.lastUnfold.dir); }
   }
@@ -180,6 +194,26 @@ export class InsideView {
       if (dir === 'n') { x = g.x0 + R() * (g.x1 - g.x0 + 1); z = g.y0 + R(); } else if (dir === 's') { x = g.x0 + R() * (g.x1 - g.x0 + 1); z = g.y1 + R(); } else if (dir === 'w') { x = g.x0 + R(); z = g.y0 + R() * (g.y1 - g.y0 + 1); } else { x = g.x1 + R(); z = g.y0 + R() * (g.y1 - g.y0 + 1); }
       const sp = glowSprite(0xffe2a0, 0.5 + R() * 0.6, 1); sp.position.set(x, 0.3, z); sp.userData = { vy: 0.8 + R() * 1.6, life: 1.2 + R() }; this.sparkGroup.add(sp); this.sparks.push(sp);
     }
+  }
+  setJourney(on) {
+    this.journey = on; this.built = -1; this.ceiling.visible = on; this.lamps.visible = on; this.jprops.visible = on;
+    this.gridLines.visible = !on; if (on) { this.sel.visible = false; this.ghost.visible = false; }
+  }
+  // Things you can use in person: the conductor's post, the tea urns, and anything left lying about.
+  setJourneyProps(d) {
+    while (this.jprops.children.length) this.jprops.remove(this.jprops.children[0]);
+    const brass = 0xd0a248;
+    const c = d.post; const con = new THREE.Group(); con.position.set(c.x, FLOOR_H, c.z);
+    con.add(box(0x4a3020, 0, 0.22, 0, 0.5, 0.44, 0.4)); con.add(box(0x6a4a30, 0, 0.46, 0, 0.56, 0.04, 0.46)); const dial = cyl(brass, 0, 0.62, 0, 0.2, 0.05, 0.2, { emissive: 0x2a1a04 }); dial.rotation.x = Math.PI / 2 - 0.5; con.add(dial); con.add(sph(0xff6a3a, 0.16, 0.54, 0.12, 0.07, 0.07, 0.07, { emissive: 0xff4a1a, emissiveIntensity: 1.2 }));
+    con.add(sph(0xc8a070, -0.2, 0.52, 0.1, 0.18, 0.16, 0.14)); con.add(box(0xe8d8b8, -0.2, 0.62, 0.1, 0.1, 0.02, 0.06)); // the post bag
+    const gl = glowSprite(0xffc070, 1.6, 0.8); gl.position.set(0, 0.7, 0); con.add(gl); this.jprops.add(con);
+    for (const u of d.urns) { const g = new THREE.Group(); g.position.set(u.x, FLOOR_H, u.z); g.add(cyl(brass, 0, 0.2, 0, 0.22, 0.4, 0.22, { emissive: 0x2a1a04 })); g.add(sph(brass, 0, 0.42, 0, 0.2, 0.14, 0.2, { emissive: 0x2a1a04 })); g.add(cyl(brass, 0.14, 0.26, 0, 0.05, 0.05, 0.05)); const st = glowSprite(0xfff4e0, 0.7, 0.6); st.position.set(0, 0.62, 0); g.add(st); this.jprops.add(g); }
+    for (const m of d.spots) { if (m.done) continue; const g = new THREE.Group(); g.position.set(m.x, FLOOR_H, m.z); g.add(sph(0xf4ecd8, 0, 0.05, 0, 0.12, 0.08, 0.12)); g.add(cyl(0xe8d8b8, 0.09, 0.03, 0.05, 0.08, 0.06, 0.08)); this.jprops.add(g); }
+    this.markerSprites = d.markers.map((m) => { const sp = glowSprite(0xffe08a, 0.34, 0.95); sp.position.set(m.x, FLOOR_H + (m.y || 0.9), m.z); sp.userData.base = sp.position.y; this.jprops.add(sp); return sp; });
+  }
+  emote(pid, kind) {
+    const f = this.figures.get(pid); if (!f) return;
+    const sp = glowSprite(kind === 'heart' ? 0xff7aa8 : 0xffe08a, 0.55, 1); sp.position.set(f.position.x, 1.1, f.position.z); sp.userData = { vy: 0.7, life: 1.4 }; this.sparkGroup.add(sp); this.sparks.push(sp);
   }
   setSelected(room) { this.selRoom = room; this.updateSel(); }
   updateSel() {
@@ -200,12 +234,13 @@ export class InsideView {
     return { x: Math.floor(hit.x), y: Math.floor(hit.z) };
   }
   fit(aspect, snap) {
+    this.setPlatformTarget(false);
     const t = this.ptTarget, tan = Math.tan((40 * Math.PI) / 360);
-    const dist = clamp(Math.max((t.d + 1.5) * 0.55 / tan, (t.w + 0.6) * 0.5 / (tan * aspect)), 8, 55);
+    const dist = clamp(Math.max((t.d + 1.5) * 0.55 / tan, (t.w + 1.8) * 0.5 / (tan * aspect)), 8, 55);
     this.controls.target.set(t.x, 0, t.z + 0.4);
     const pol = 0.95; this.camera.position.set(t.x, Math.cos(pol) * dist, t.z + 0.4 + Math.sin(pol) * dist); this.controls.update();
   }
-  resize(aspect) { this.camera.aspect = aspect; this.camera.updateProjectionMatrix(); }
+  resize(aspect) { this.camera.aspect = aspect; this.camera.updateProjectionMatrix(); this.jcam.aspect = aspect; this.jcam.updateProjectionMatrix(); }
 
   // ---------- frame ----------
   update(dt, time) {
@@ -215,6 +250,7 @@ export class InsideView {
     const p = this.pt, t = this.ptTarget, k = 1 - Math.exp(-dt * 4.5);
     p.x += (t.x - p.x) * k; p.z += (t.z - p.z) * k; p.w += (t.w - p.w) * k; p.d += (t.d - p.d) * k;
     this.platform.position.set(p.x, -0.17, p.z); this.platform.scale.set(p.w, 0.3, p.d);
+    if (this.journey) { this.ceiling.position.x = p.x; this.ceiling.position.z = p.z; this.ceiling.scale.set(p.w, 0.06, p.d); for (const m of this.markerSprites) m.position.y = m.userData.base + Math.sin(time * 3 + m.position.x) * 0.05; }
     // passengers
     const seen = new Set();
     for (const pa of sim.s.passengers) {
