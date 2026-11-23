@@ -51,7 +51,7 @@ function badge(id, on) { const b = $(id); let i = b.querySelector('.badge'); if 
 let speechT = 0, dutiesDirty = true, journey = null;
 const jui = {
   audio,
-  speech(name, text, tale) { const el = $('speech'); el.innerHTML = `<small>${tale ? 'tells you a tale' : 'says'}</small><b>${esc(name)}</b><p>${esc(text)}</p>`; el.hidden = false; clearTimeout(speechT); speechT = setTimeout(() => { el.hidden = true; }, 4200 + text.length * 40); audio.note(9, 0.3); },
+  speech(name, text, tale) { const el = $('speech'); el.innerHTML = `<small>${tale === 'look' ? 'you see' : tale ? 'tells you a tale' : 'says'}</small><b>${esc(name)}</b><p>${esc(text)}</p>`; el.hidden = false; clearTimeout(speechT); speechT = setTimeout(() => { el.hidden = true; }, 4200 + text.length * 40); audio.note(9, 0.3); },
   note(msg) { toast(esc(msg)); },
   prompt(n) { const b = $('actBtn'); if (n) { b.textContent = n.label; b.hidden = false; } else b.hidden = true; },
   console(near) { if (view === 'journey') $('stoke').hidden = !near; },

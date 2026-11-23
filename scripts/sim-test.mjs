@@ -128,6 +128,36 @@ const prog = sim.loreProgress({ need: { miles: 10000 } }); ok(prog >= 0 && prog 
     sim4.setJourney(false); c0 = s4.charm; for (let i = 0; i < 100; i++) sim4.updateP(pa, 0.1); const gainA = s4.charm - c0;
     ok(gainJ > gainA * 1.15 && gainJ < gainA * 1.4, `Journey mode earns about a quarter more (${(gainJ / gainA).toFixed(2)}x)`); }
 }
+// journey additions: windows, errands, plants, lamps, and passengers who give way
+{
+  const s5 = newState(); const sim5 = new Sim(s5, {}); s5.charm = 1e5; s5.unlocked.push('garden', 'library');
+  sim5.build('garden', 13, 4, 3, 3); sim5.build('library', 6, 8, 3, 3);
+  s5.line.pending = { idx: 0, name: 'T', mile: 0 }; sim5.invite({ mood: 6 }); const pid = s5.passengers[0].id;
+  const wins = sim5.windows(); ok(wins.length >= 3 && wins.every((w) => ['A', 'B'].includes(w.view)), `rooms with outer walls get windows (${wins.length})`);
+  ok(wins.every((w) => { const r = sim5.roomById.get(w.rid); return w.x >= r.x - 0.01 && w.x <= r.x + r.w + 0.01 && w.z >= r.y - 0.01 && w.z <= r.y + r.h + 0.01; }), 'every window sits on its own room\'s wall');
+  ok(typeof sim5.outsideText() === 'string' && sim5.outsideText().length > 10, 'the window says what is outside: ' + sim5.outsideText());
+  // lookout
+  s5.jobs.list = [sim5.newJob('lookout')]; ok(sim5.jobEvent('tell', { pid }) === null, 'you cannot report what you have not seen');
+  const lk0 = s5.looks || 0; sim5.jobEvent('look', { text: 'a windmill' }); ok(s5.looks === lk0 + 1, 'looking out is counted');
+  const reply = sim5.jobEvent('tell', { pid }); ok(typeof reply === 'string' && s5.jobs.list.length === 0, 'telling a passenger finishes the lookout: ' + reply);
+  // errand
+  const fo = sim5.fetchFor(s5.passengers[0]); ok(fo && fo.item, 'a passenger has something worth fetching: ' + (fo && fo.item));
+  s5.jobs.list = [sim5.newJob('fetch')]; const fj = s5.jobs.list[0]; sim5.jobEvent('take', { rid: -1 }); ok(!sim5.carry, 'wrong shelf, nothing taken');
+  sim5.jobEvent('take', { rid: fj.data.rid }); ok(sim5.carry && sim5.carry.kind === 'item', 'take the item from the right room');
+  const dn = s5.jobs.done; sim5.jobEvent('deliver', { pid }); ok(s5.jobs.done === dn + 1 && !sim5.carry, 'delivering it finishes the errand');
+  // plants and lamps
+  s5.jobs.list = [sim5.newJob('water')]; for (let i = 0; i < 3; i++) sim5.jobEvent('spot', { kind: 'water', i }); ok(s5.jobs.done === dn + 2, 'three plants watered finishes the duty');
+  s5.jobs.list = [sim5.newJob('lamps')]; for (let i = 0; i < 3; i++) sim5.jobEvent('spot', { kind: 'lamps', i }); ok(s5.jobs.done === dn + 3, 'three lamps lit finishes the duty');
+  ok(s5.jobs.list.length === 0, 'finished duties leave the list');
+  s5.jobs.nextAt = 0; const kinds = new Set(); for (let i = 0; i < 40; i++) { s5.jobs.list = []; s5.jobs.nextAt = 0; sim5.ensureJobs(); s5.jobs.list.forEach((j) => kinds.add(j.kind)); }
+  ok(kinds.size >= 7, `a wide mix of duties turns up over time (${[...kinds].join(', ')})`);
+  // passengers give way to the conductor
+  const pa = s5.passengers[0], rt = sim5.rt.get(pa.id), sl = s5.rooms[0];
+  pa.x = sl.x + 0.5; pa.y = sl.y + 0.5; rt.state = 'walk'; rt.path = [sl.y * 24 + sl.x, sl.y * 24 + sl.x + 1]; rt.i = 0;
+  sim5.conductor = { x: pa.x + 0.5, z: pa.y }; const x0 = pa.x; for (let i = 0; i < 10; i++) sim5.updateP(pa, 0.05);
+  ok(pa.x - x0 < 0.2, 'a passenger waits when the conductor is in the way');
+  for (let i = 0; i < 80; i++) sim5.updateP(pa, 0.05); ok(pa.x - x0 > 0.4, 'and goes on after a few seconds, so nobody is ever stuck');
+}
 // save round trip
 const back = loadState(JSON.stringify(s)); ok(back && back.rooms.length === s.rooms.length, 'save round-trips');
 console.log(fails ? `${fails} FAILED` : 'all passed'); process.exit(fails ? 1 : 0);

@@ -46,6 +46,10 @@ export class World {
     if (LOOK.shadows) { r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap; }
     this.line = new LineView(this); this.inside = new InsideView(this);
     this.view = 'line'; this.tmp = new THREE.Vector3();
+    // windows: a small live picture of the Line for each side of the train
+    this.winRT = [0, 1].map(() => new THREE.WebGLRenderTarget(256, 160)); this.winCam = [0, 1].map(() => new THREE.PerspectiveCamera(60, 1.6, 0.5, 700));
+    this.winCam[0].position.set(0, 1.4, -1); this.winCam[0].lookAt(26, 0.9, 12); this.winCam[1].position.set(0, 1.4, -1); this.winCam[1].lookAt(-26, 0.9, 12);
+    this.inside.setWindowTextures(this.winRT[0].texture, this.winRT[1].texture); this.winTick = 0;
     this.useBloom = true; this.quality = 'high'; this.frameT = [];
     const comp = this.composer = new EffectComposer(r, new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: mobile ? 0 : 4 }));
     this.pass = new RenderPass(this.line.scene, this.line.camera); comp.addPass(this.pass);
@@ -88,6 +92,16 @@ export class World {
   frame(dt, time) {
     if (this.grade) this.grade.uniforms.time.value = time % 10;
     if (this.view === 'line') this.line.update(dt, time); else this.inside.update(dt, time);
+    if (this.view === 'journey') {
+      this.line.update(dt, time);                      // keep the scenery moving past the windows
+      const every = this.mobile ? 3 : 2; this.winTick = (this.winTick + 1) % (every * 2);
+      if (this.winTick % every === 0) {
+        const k = this.winTick / every, views = this.inside.windowViews;
+        if (views.has(k === 0 ? 'A' : 'B')) {
+          const r = this.renderer; this.line.train.visible = false; r.setRenderTarget(this.winRT[k]); r.render(this.line.scene, this.winCam[k]); r.setRenderTarget(null); this.line.train.visible = true;
+        }
+      }
+    }
     if (this.useBloom) this.composer.render(); else this.renderer.render(this.pass.scene, this.pass.camera);
     this.frameT.push(dt); if (this.frameT.length > 150) { const a = this.frameT.reduce((x, y) => x + y, 0) / this.frameT.length; this.frameT.length = 0; if (a > 0.036) this.degrade(); }
   }

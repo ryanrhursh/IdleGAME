@@ -135,6 +135,7 @@ export const LORE = [
   { id: 'log1', vol: 0, scene: 'cap', title: 'The Conductor\'s Log', need: { jobs: 1 }, text: 'In the cab you found a log, and in the log, a first line already written in a hand you almost knew: "Do one small thing well, and the train notices." You did one small thing. The page below it, a little embarrassed, wrote itself.' },
   { id: 'log2', vol: 1, scene: 'dinner', title: 'Small Duties', need: { jobs: 8 }, text: 'Pouring tea, carrying the post bag, picking up a dropped glove. None of it is grand. The Marigold has always run on this kind of thing: a great many small kindnesses, done on foot, by someone who stayed.' },
   { id: 'log3', vol: 2, scene: 'seat', title: 'What the Cap Remembers', need: { jobs: 25 }, text: 'On the twenty-fifth page of the log there is a drawing of the Marigold, and beside it, in the margin: "Thank you for walking her." The cap on the hook is warm. It is, you notice, very slightly too small, as though it has been waiting for someone younger. Or someone who has just begun.' },
+  { id: 'window', vol: 0, scene: 'track', title: 'A Window That Faces the Right Way', need: { looks: 3 }, text: 'You noticed, after a few days, that the windows never show the wrong side. Whichever way a room faces, the glass shows what is actually going by, even when the room itself should not be anywhere near the outside. Nobody has ever explained this. Nobody wants to.' },
   { id: 'dinner', vol: 1, scene: 'dinner', title: 'Stories at Dinner', need: { tales: 3 }, text: 'Somewhere between the soup and the second pot of tea, people began to tell the truth. Nobody planned it. The Marigold only dimmed the lamps a little and kept the kettle warm.' },
   { id: 'glow', vol: 1, scene: 'glow', title: 'The Well-Loved Rooms', need: { levels: 4 }, text: 'A room loved enough begins to glow at the edges. It is not a spell. Rooms simply do this, when enough people have been happy in them, and have said so.' },
   { id: 'table', vol: 1, scene: 'dinner', title: 'The Long Table', need: { aboard: 6 }, text: 'Six chairs, then eight, then more than the table was long. Nobody ever stood. The Marigold, who has never turned anyone away, rearranged her walls so that no one would have to.' },
@@ -238,5 +239,9 @@ export const JOB_FLAVOR = {
   checkin: ['A train is only as warm as the people on it. Go and see how they are.'],
   post: ['A bag of post has been waiting by the conductor\'s post for a day. Someone is expecting it.'],
   tidy: ['A room has been well loved, which is to say, a little untidy.'],
+  water: ['The plants have noticed that nobody has been in for a while, and are making their feelings known by drooping.'],
+  lamps: ['A few lamps have gone out, quietly, so as not to make a fuss. Someone should relight them.'],
+  fetch: ['Someone has mentioned, very casually, that they miss a certain thing. They did not ask. That is how you know.'],
+  lookout: ['There is always something going by. Somebody ought to see it, and then tell someone else, or it did not happen.'],
   stoke: ['The boiler is feeling shy. A bit of coal and a bit of company will bring her round.'],
 };

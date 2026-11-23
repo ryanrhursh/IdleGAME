@@ -1,6 +1,6 @@
 // Journey mode: walk the Marigold as the conductor, in first person.
 import * as THREE from 'three';
-import { clamp } from './logic.js';
+import { clamp, SPOT_JOBS } from './logic.js';
 
 const EYE = 0.6, SPEED = 1.9, REACH = 1.45;
 
@@ -42,7 +42,7 @@ export class Journey {
   }
   releaseLock() { try { if (document.pointerLockElement) document.exitPointerLock(); } catch (e) { /* ignore */ } }
   tapCenter() { const r = this.world.canvas.getBoundingClientRect(); this.tap(r.left + r.width / 2, r.top + r.height / 2); }
-  exit() { this.releaseLock(); this.hover = false; this.active = false; this.sim.setJourney(false); this.keys.clear(); this.stick.x = this.stick.y = 0; this.prompt = null; }
+  exit() { this.releaseLock(); this.hover = false; this.active = false; this.sim.conductor = null; this.sim.setJourney(false); this.keys.clear(); this.stick.x = this.stick.y = 0; this.prompt = null; }
 
   // ----- what is here to use -----
   items() {
@@ -50,8 +50,9 @@ export class Journey {
     for (const p of s.passengers) out.push({ kind: 'pax', id: p.id, x: p.x, z: p.y, y: 0.62, name: p.name });
     const post = sim.post(); out.push({ kind: 'post', x: post.x, z: post.z, y: 0.6 });
     for (const u of sim.urns()) out.push({ kind: 'urn', x: u.x, z: u.z, y: 0.5 });
-    const tj = s.jobs.list.find((j) => j.kind === 'tidy');
-    if (tj) tj.data.spots.forEach((m, i) => { if (!m.done) out.push({ kind: 'mess', i, x: m.x, z: m.z, y: 0.12 }); });
+    for (const j of s.jobs.list) if (SPOT_JOBS[j.kind]) j.data.spots.forEach((m, i) => { if (!m.done) out.push({ kind: 'spot', jobKind: j.kind, i, x: m.x, z: m.z, y: j.kind === 'lamps' ? 0.68 : 0.14 }); });
+    for (const w of sim.windows()) out.push({ kind: 'window', x: w.x, z: w.z, y: 0.84 });
+    const fj = s.jobs.list.find((j) => j.kind === 'fetch'); if (fj && !sim.carry) { const u = sim.pickups().find((q) => q.rid === fj.data.rid); if (u) out.push({ kind: 'pick', rid: u.rid, item: u.item, x: u.x, z: u.z, y: 0.4 }); }
     return out;
   }
   describe(it) {
@@ -60,11 +61,15 @@ export class Journey {
       const first = it.name.split(' ')[0];
       if (carry && carry.kind === 'tea' && J.find((j) => j.kind === 'tea' && !j.data.served.includes(it.id))) return { label: `Serve tea to ${first}`, act: 'serve' };
       if (carry && carry.kind === 'post' && carry.to === it.id) return { label: `Give ${first} the post`, act: 'deliver' };
+      if (carry && carry.kind === 'item' && carry.to === it.id) return { label: `Give ${first} ${carry.item}`, act: 'deliver' };
+      const lk = J.find((j) => j.kind === 'lookout'); if (lk && lk.data.seen) return { label: `Tell ${first} what you saw`, act: 'tell' };
       return { label: `Talk to ${first}`, act: 'talk' };
     }
     if (it.kind === 'post') return J.find((j) => j.kind === 'post') && !carry ? { label: 'Take the post bag', act: 'bag' } : null;
     if (it.kind === 'urn') return J.find((j) => j.kind === 'tea') && !carry ? { label: 'Pour a cup of tea', act: 'pour' } : null;
-    if (it.kind === 'mess') return { label: 'Tidy up', act: 'tidy' };
+    if (it.kind === 'spot') return { label: SPOT_JOBS[it.jobKind], act: 'spot' };
+    if (it.kind === 'pick') return { label: `Take ${it.item}`, act: 'take' };
+    if (it.kind === 'window') return { label: 'Look out of the window', act: 'look' };
     return null;
   }
   nearest() {
@@ -74,34 +79,42 @@ export class Journey {
   }
   interact(target) {
     const n = target || this.nearest(); if (!n) return false;
-    const sim = this.sim, it = n.it; let msg = null;
+    const sim = this.sim, it = n.it, inside = this.world.inside; let msg = null;
+    inside.reach();
     if (n.act === 'talk') { const c = sim.chatWith(it.id); if (c) { sim.jobEvent('talk', { pid: it.id }); this.ui.speech(it.name, c.text, c.tale); } return true; }
+    if (n.act === 'tell') { const r = sim.jobEvent('tell', { pid: it.id }); this.ui.speech(it.name, r || 'Thank you.', false); this.ui.audio.pop(); this.syncProps(true); return true; }
+    if (n.act === 'look') { const text = sim.outsideText(); sim.jobEvent('look', { text }); this.ui.speech('Out of the window', text, 'look'); this.ui.audio.pop(); this.syncProps(true); return true; }
     if (n.act === 'serve') msg = sim.jobEvent('serve', { pid: it.id });
     else if (n.act === 'deliver') msg = sim.jobEvent('deliver', { pid: it.id });
     else if (n.act === 'bag') msg = sim.jobEvent('bag');
     else if (n.act === 'pour') msg = sim.jobEvent('pour');
-    else if (n.act === 'tidy') msg = sim.jobEvent('tidy', { i: it.i });
+    else if (n.act === 'take') msg = sim.jobEvent('take', { rid: it.rid });
+    else if (n.act === 'spot') msg = sim.jobEvent('spot', { kind: it.jobKind, i: it.i });
     if (msg) this.ui.note(msg);
     this.ui.audio.pop(); this.syncProps(true); return true;
   }
   // gold markers over whatever the current duties point at
   markers() {
-    const sim = this.sim, s = sim.s, carry = sim.carry, out = [], post = sim.post();
+    const sim = this.sim, s = sim.s, carry = sim.carry, out = [], post = sim.post(), pax = (p, y = 1.05) => out.push({ x: p.x, z: p.y, y });
     for (const j of s.jobs.list) {
-      if (j.kind === 'tea') { if (!carry) sim.urns().forEach((u) => out.push({ x: u.x, z: u.z, y: 0.85 })); else s.passengers.filter((p) => !j.data.served.includes(p.id)).forEach((p) => out.push({ x: p.x, z: p.y, y: 1.05 })); }
-      else if (j.kind === 'post') { if (!carry) out.push({ x: post.x, z: post.z, y: 0.95 }); else { const p = s.passengers.find((q) => q.id === j.data.to); if (p) out.push({ x: p.x, z: p.y, y: 1.05 }); } }
-      else if (j.kind === 'checkin') s.passengers.filter((p) => !j.data.met.includes(p.id)).slice(0, 4).forEach((p) => out.push({ x: p.x, z: p.y, y: 1.05 }));
-      else if (j.kind === 'tidy') j.data.spots.forEach((m) => { if (!m.done) out.push({ x: m.x, z: m.z, y: 0.5 }); });
+      if (j.kind === 'tea') { if (!carry) sim.urns().forEach((u) => out.push({ x: u.x, z: u.z, y: 0.85 })); else s.passengers.filter((p) => !j.data.served.includes(p.id)).forEach((p) => pax(p)); }
+      else if (j.kind === 'post') { if (!carry) out.push({ x: post.x, z: post.z, y: 0.95 }); else { const p = s.passengers.find((q) => q.id === j.data.to); if (p) pax(p); } }
+      else if (j.kind === 'checkin') s.passengers.filter((p) => !j.data.met.includes(p.id)).slice(0, 4).forEach((p) => pax(p));
+      else if (SPOT_JOBS[j.kind]) j.data.spots.forEach((m) => { if (!m.done) out.push({ x: m.x, z: m.z, y: j.kind === 'lamps' ? 0.95 : 0.5 }); });
       else if (j.kind === 'stoke') out.push({ x: post.x, z: post.z, y: 0.95 });
+      else if (j.kind === 'lookout') { if (!j.data.seen) sim.windows().forEach((w) => out.push({ x: w.x, z: w.z, y: 1.2 })); else s.passengers.forEach((p) => pax(p)); }
+      else if (j.kind === 'fetch') { if (!carry) { const u = sim.pickups().find((q) => q.rid === j.data.rid); if (u) out.push({ x: u.x, z: u.z, y: 0.75 }); } else { const p = s.passengers.find((q) => q.id === j.data.to); if (p) pax(p); } }
     }
     return out;
   }
   syncProps(force) {
-    const sim = this.sim, s = sim.s, tj = s.jobs.list.find((j) => j.kind === 'tidy');
-    const key = [sim.version, s.jobs.list.map((j) => j.id + ':' + j.prog).join(','), sim.carry ? sim.carry.kind : '-', s.passengers.length].join('|');
+    const sim = this.sim, s = sim.s;
+    const key = [sim.version, s.jobs.list.map((j) => j.id + ':' + j.prog + ':' + (j.data && j.data.seen ? 's' : '')).join(','), sim.carry ? sim.carry.kind + (sim.carry.item || '') : '-', s.passengers.length].join('|');
+    this.world.inside.setHeld(sim.carry);
     if (!force && key === this.propsKey) return; this.propsKey = key;
-    // passenger markers move, so refresh them every so often rather than every frame
-    this.world.inside.setJourneyProps({ post: sim.post(), urns: sim.urns(), spots: tj ? tj.data.spots : [], markers: this.markers() });
+    const spots = []; for (const j of s.jobs.list) if (SPOT_JOBS[j.kind]) j.data.spots.forEach((m) => spots.push({ ...m, kind: j.kind }));
+    const fj = s.jobs.list.find((j) => j.kind === 'fetch'), pickups = fj && !sim.carry ? sim.pickups().filter((u) => u.rid === fj.data.rid) : [];
+    this.world.inside.setJourneyProps({ post: sim.post(), urns: sim.urns(), spots, pickups, windows: sim.windows(), markers: this.markers() });
   }
 
   // ----- moving -----
@@ -140,7 +153,18 @@ export class Journey {
       if (d < 0.08) { this.path.shift(); if (!this.path.length && this.goal) { const g = this.goal; this.goal = null; if (Math.hypot(g.it.x - this.x, g.it.z - this.z) < REACH + 0.3) this.interact(g); } }
       else { const st = Math.min(SPEED * dt, d); mx = (dx / d) * st; mz = (dz / d) * st; const want = Math.atan2(-dx, -dz); let dy = ((want - this.yaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI; this.yaw += dy * Math.min(1, dt * 4); }
     }
-    if (mx || mz) { const [nx, nz] = sim.tryMove(this.x, this.z, mx, mz); if (nx === this.x && nz === this.z) this.path = []; this.x = nx; this.z = nz; this.bob += dt * 9; }
+    let moved = false;
+    if (mx || mz) {
+      let [nx, nz] = sim.tryMove(this.x, this.z, mx, mz);
+      for (const q of sim.s.passengers) {                              // people are solid: slide around them
+        const dx = nx - q.x, dz = nz - q.y, d = Math.hypot(dx, dz), min = 0.36;
+        if (d < min && d > 1e-4) { const px = nx + (dx / d) * (min - d), pz = nz + (dz / d) * (min - d); if (sim.canStand(px, pz)) { nx = px; nz = pz; } else { nx = this.x; nz = this.z; } }
+      }
+      if (nx === this.x && nz === this.z) this.path = [];
+      moved = Math.hypot(nx - this.x, nz - this.z) > 1e-4; this.x = nx; this.z = nz; if (moved) this.bob += dt * 9;
+    }
+    sim.conductor = { x: this.x, z: this.z };
+    this.world.inside.handsMoving = moved; this.world.inside.bobPhase = this.bob;
     // no pointer lock available: turn by where the cursor sits (dead zone in the middle, faster toward the edges)
     if (this.hover && !this.locked && this.mouse.over) {
       const r = this.world.canvas.getBoundingClientRect(), nx = (this.mouse.x - r.left - r.width / 2) / (r.width / 2), ny = (this.mouse.y - r.top - r.height / 2) / (r.height / 2);

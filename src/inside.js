@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { ROOMS } from './data.js';
 import { GW, GH, rng, hash, clamp } from './logic.js';
 import { LOOK } from './look.js';
-import { toon, basic, glowSprite, mesh, G, box, cyl, sph, cone, makeFigure, gearGeometry } from './gfx.js';
+import { toon, basic, glowSprite, mesh, G, box, cyl, sph, cone, makeFigure, gearGeometry, toonGradient } from './gfx.js';
 
 const FLOOR_H = 0.1;
 const STYLES = [[1, 1, 1], [1.25, 1.0, 0.8], [0.8, 1.0, 1.3], [1.3, 0.8, 1.1]];
@@ -49,7 +49,7 @@ const BUILDERS = {
       if ((i + j) % 2 === 0) g.add(box(0x5a3a22, i + 0.5, 0.06, j + 0.5, 0.86, 0.12, 0.86));
       if (R() < 0.8) { const hue = new THREE.Color().setHSL(R(), 0.7, 0.6); g.add(cyl(0x3a8a3a, i + 0.5, 0.25, j + 0.5, 0.04, 0.35, 0.04)); g.add(sph(hue, i + 0.5, 0.46, j + 0.5, 0.2, 0.2, 0.2, { emissive: hue, emissiveIntensity: 0.35 })); }
     }
-    if (w * h >= 6) { g.add(cyl(0x6a4a2a, w / 2, 0.6, h / 2, 0.16, 1.2, 0.16)); g.add(sph(0x4aaa5a, w / 2, 1.5, h / 2, 1.1, 0.9, 1.1)); g.add(sph(0x5aba6a, w / 2 + 0.3, 1.8, h / 2 - 0.2, 0.7, 0.6, 0.7)); }
+    if (w * h >= 6) { g.add(cyl(0x6a4a2a, w / 2, 0.45, h / 2, 0.16, 0.9, 0.16)); g.add(sph(0x4aaa5a, w / 2, 1.0, h / 2, 1.0, 0.7, 1.0)); g.add(sph(0x5aba6a, w / 2 + 0.3, 1.18, h / 2 - 0.2, 0.62, 0.45, 0.62)); }
     for (let k = 0; k < 3; k++) { const gl = glowSprite(0xd8ff9a, 0.6, 0.9); gl.position.set(R() * w, 0.6 + R() * 0.8, R() * h); g.add(gl); }
   },
   library(g, w, h, R) {
@@ -60,11 +60,11 @@ const BUILDERS = {
   workshop(g, w, h, R) {
     g.add(box(0x6a5a4a, w / 2, 0.3, 0.4, Math.max(1, w - 0.4), 0.5, 0.6)); g.add(box(0x3a3a44, 0.7, 0.65, 0.4, 0.3, 0.2, 0.3));
     const gear = new THREE.Mesh(gearGeometry(0.28, 9, 0.08), toon(0xd0a248, { emissive: 0x2a1604 })); gear.position.set(w - 0.8, 0.75, 0.42); gear.rotation.x = Math.PI / 2; g.add(gear); g.userData.spin = gear;
-    for (let i = 0; i < w; i++) g.add(box(0x4a4a56, i + 0.5, 0.9, h - 0.15, 0.9, 1.4, 0.25));
+    for (let i = 0; i < w; i++) g.add(box(0x4a4a56, i + 0.5, 0.62, h - 0.15, 0.9, 1.0, 0.25));
     for (let k = 0; k < 3; k++) { const gl = glowSprite(0xffb050, 0.5, 0.9); gl.position.set(1 + R() * (w - 2 + 0.01), 0.8, 0.5); g.add(gl); }
   },
   observatory(g, w, h, R) {
-    g.add(cyl(0x4a4a6a, w / 2, 0.15, h / 2, 0.8, 0.3, 0.8)); const t = cyl(0xd0a248, w / 2, 0.85, h / 2, 0.22, 1.5, 0.22, { emissive: 0x2a1604 }); t.rotation.z = 0.5; g.add(t);
+    g.add(cyl(0x4a4a6a, w / 2, 0.15, h / 2, 0.8, 0.3, 0.8)); const t = cyl(0xd0a248, w / 2, 0.7, h / 2, 0.2, 1.05, 0.2, { emissive: 0x2a1604 }); t.rotation.z = 0.5; g.add(t);
     for (const a of [0, 2.1, 4.2]) { const l = cyl(0x6a4a2a, w / 2 + Math.cos(a) * 0.3, 0.4, h / 2 + Math.sin(a) * 0.3, 0.05, 0.9, 0.05); g.add(l); }
     for (let k = 0; k < 9; k++) { const s = sph(0xfff4c0, 0.3 + R() * (w - 0.6), 0.8 + R() * 1.4, 0.3 + R() * (h - 0.6), 0.09, 0.09, 0.09, { emissive: 0xfff4c0, emissiveIntensity: 2 }); g.add(s); }
     const ring = mesh(G.tor, toon(0xd0a248, { emissive: 0x2a1604 }), w / 2, 0.1, h / 2, Math.min(w, h) * 0.9, Math.min(w, h) * 0.9, 1); ring.rotation.x = Math.PI / 2; g.add(ring);
@@ -119,7 +119,9 @@ export class InsideView {
     c.enablePan = true; c.screenSpacePanning = false; c.enableDamping = true; c.dampingFactor = 0.1; c.minDistance = 6; c.maxDistance = 60; c.minPolarAngle = 0.45; c.maxPolarAngle = 1.2; c.minAzimuthAngle = -0.8; c.maxAzimuthAngle = 0.8; c.rotateSpeed = 0.5; c.panSpeed = 0.9;
     c.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE }; c.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE }; c.enabled = false;
     // first-person (journey) camera, ceiling, lamps and in-person props
-    this.jcam = new THREE.PerspectiveCamera(74, 1, 0.03, 120); this.journey = false;
+    this.jcam = new THREE.PerspectiveCamera(74, 1, 0.03, 120); this.journey = false; scene.add(this.jcam);
+    this.winTexA = null; this.winTexB = null; this.windowViews = new Set(); this.reachT = 0; this.handsMoving = false; this.bobPhase = 0;
+    this.buildHands();
     this.ceiling = mesh(G.box, new THREE.MeshToonMaterial({ color: 0x6a4a38, gradientMap: null, side: THREE.DoubleSide }), 0, FLOOR_H + 1.32, 0, 1, 0.06, 1); this.ceiling.castShadow = false; this.ceiling.visible = false; scene.add(this.ceiling);
     this.lamps = new THREE.Group(); this.lamps.visible = false; scene.add(this.lamps);
     this.jprops = new THREE.Group(); this.jprops.visible = false; scene.add(this.jprops);
@@ -195,8 +197,34 @@ export class InsideView {
       const sp = glowSprite(0xffe2a0, 0.5 + R() * 0.6, 1); sp.position.set(x, 0.3, z); sp.userData = { vy: 0.8 + R() * 1.6, life: 1.2 + R() }; this.sparkGroup.add(sp); this.sparks.push(sp);
     }
   }
+  setWindowTextures(a, b) { this.winTexA = a; this.winTexB = b; }
+  // Your own hands, drawn over everything, so nothing in the world can clip through them.
+  buildHands() {
+    const M = (c) => { const m = new THREE.MeshToonMaterial({ color: c, gradientMap: toonGradient() }); m.depthTest = false; m.depthWrite = false; return m; };
+    const sleeve = M(0x2f7f86), skin = M(0xe0b98a), gold = M(0xf2b134), H = new THREE.Group(); H.visible = false;
+    const arm = (x, rot) => { const g = new THREE.Group(); g.position.set(x, -0.2, -0.3); g.rotation.set(-0.55, rot, 0);
+      const a = new THREE.Mesh(G.cyl, sleeve); a.scale.set(0.07, 0.3, 0.07); a.rotation.x = Math.PI / 2; a.position.z = 0.0; g.add(a);
+      const c = new THREE.Mesh(G.tor, gold); c.scale.set(0.085, 0.085, 0.085); c.position.z = -0.15; g.add(c);
+      const h = new THREE.Mesh(G.sph, skin); h.scale.set(0.085, 0.07, 0.09); h.position.z = -0.2; g.add(h);
+      g.traverse((o) => { o.renderOrder = 100; }); return g; };
+    this.handR = arm(0.2, -0.22); this.handL = arm(-0.2, 0.22); H.add(this.handR, this.handL);
+    this.held = new THREE.Group(); this.held.position.set(0.2, -0.17, -0.5); H.add(this.held);
+    this.handsGroup = H; this.jcam.add(H); this.heldKind = null;
+  }
+  setHeld(carry) {
+    const key = carry ? (carry.kind === 'item' ? 'item:' + carry.item : carry.kind) : null; if (key === this.heldKind) return; this.heldKind = key;
+    while (this.held.children.length) this.held.remove(this.held.children[0]);
+    if (!carry) return;
+    const M = (c, o = {}) => { const m = new THREE.MeshToonMaterial({ color: c, gradientMap: toonGradient(), ...o }); m.depthTest = false; m.depthWrite = false; return m; };
+    const add = (geo, mat, x, y, z, sx, sy, sz) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.renderOrder = 101; this.held.add(m); return m; };
+    if (carry.kind === 'tea') { add(G.cyl, M(0xfff4e0), 0, 0, 0, 0.09, 0.075, 0.09); add(G.cyl, M(0x6a3a1a), 0, 0.032, 0, 0.075, 0.01, 0.075); add(G.tor, M(0xfff4e0), 0.055, 0, 0, 0.06, 0.06, 0.04); add(G.cyl, M(0xe8dcc8), 0, -0.042, 0, 0.13, 0.012, 0.13); const st = glowSprite(0xffffff, 0.12, 0.6); st.position.set(0, 0.08, 0); st.material.depthTest = false; st.renderOrder = 102; this.held.add(st); }
+    else if (carry.kind === 'post') { add(G.sph, M(0xc8a070), 0, 0, 0, 0.13, 0.11, 0.1); add(G.box, M(0xf7ecd4), 0.02, 0.07, 0.02, 0.07, 0.01, 0.05); add(G.cyl, M(0x8a5a3a), 0, 0.055, 0, 0.03, 0.02, 0.03); }
+    else { const w = carry.item, col = /book/.test(w) ? 0xb84a1c : /flower/.test(w) ? 0xff8aa6 : /wrench/.test(w) ? 0x9aa0a8 : /chart/.test(w) ? 0xd8b888 : /towel/.test(w) ? 0x4aa8b8 : /music/.test(w) ? 0xf7ecd4 : /fish/.test(w) ? 0xe8883a : 0xd8a868;
+      if (/book|music/.test(w)) add(G.box, M(col), 0, 0, 0, 0.12, 0.03, 0.09); else if (/chart/.test(w)) { const r = add(G.cyl, M(col), 0, 0, 0, 0.04, 0.14, 0.04); r.rotation.z = Math.PI / 2; } else if (/flower/.test(w)) { for (let k = 0; k < 4; k++) add(G.sph, M(col), (k - 1.5) * 0.03, 0.03 * (k % 2), 0, 0.05, 0.05, 0.05); add(G.cyl, M(0x3a8a3a), 0, -0.04, 0, 0.012, 0.09, 0.012); } else add(G.box, M(col), 0, 0, 0, 0.1, 0.06, 0.07); }
+  }
+  reach() { this.reachT = 0.32; }
   setJourney(on) {
-    this.journey = on; this.built = -1; this.ceiling.visible = on; this.lamps.visible = on; this.jprops.visible = on;
+    this.journey = on; this.handsGroup.visible = on; if (!on) this.setHeld(null); this.built = -1; this.ceiling.visible = on; this.lamps.visible = on; this.jprops.visible = on;
     this.gridLines.visible = !on; if (on) { this.sel.visible = false; this.ghost.visible = false; }
   }
   // Things you can use in person: the conductor's post, the tea urns, and anything left lying about.
@@ -208,7 +236,24 @@ export class InsideView {
     con.add(sph(0xc8a070, -0.2, 0.52, 0.1, 0.18, 0.16, 0.14)); con.add(box(0xe8d8b8, -0.2, 0.62, 0.1, 0.1, 0.02, 0.06)); // the post bag
     const gl = glowSprite(0xffc070, 1.6, 0.8); gl.position.set(0, 0.7, 0); con.add(gl); this.jprops.add(con);
     for (const u of d.urns) { const g = new THREE.Group(); g.position.set(u.x, FLOOR_H, u.z); g.add(cyl(brass, 0, 0.2, 0, 0.22, 0.4, 0.22, { emissive: 0x2a1a04 })); g.add(sph(brass, 0, 0.42, 0, 0.2, 0.14, 0.2, { emissive: 0x2a1a04 })); g.add(cyl(brass, 0.14, 0.26, 0, 0.05, 0.05, 0.05)); const st = glowSprite(0xfff4e0, 0.7, 0.6); st.position.set(0, 0.62, 0); g.add(st); this.jprops.add(g); }
-    for (const m of d.spots) { if (m.done) continue; const g = new THREE.Group(); g.position.set(m.x, FLOOR_H, m.z); g.add(sph(0xf4ecd8, 0, 0.05, 0, 0.12, 0.08, 0.12)); g.add(cyl(0xe8d8b8, 0.09, 0.03, 0.05, 0.08, 0.06, 0.08)); this.jprops.add(g); }
+    for (const m of d.spots) {
+      const g = new THREE.Group(); g.position.set(m.x, FLOOR_H, m.z);
+      if (m.kind === 'water') { if (m.done) continue; g.add(cyl(0xb8603a, 0, 0.07, 0, 0.14, 0.14, 0.14)); g.add(sph(0x7a8a4a, 0.02, 0.2, 0, 0.17, 0.12, 0.17)); g.add(sph(0x6a7a3a, -0.07, 0.15, 0.03, 0.09, 0.07, 0.09)); const dp = glowSprite(0x8ad0ff, 0.2, 0.7); dp.position.set(0, 0.38, 0); g.add(dp); }
+      else if (m.kind === 'lamps') { g.position.y = FLOOR_H + 0.55; g.add(box(0x3a2a20, 0, 0, 0, 0.12, 0.2, 0.1)); g.add(sph(m.done ? 0xfff0b0 : 0x4a4a52, 0, 0.12, 0, 0.12, 0.12, 0.12, m.done ? { emissive: 0xffe0a0, emissiveIntensity: 1.6 } : undefined)); if (m.done) { const gl = glowSprite(0xffd890, 0.9, 0.9); gl.position.set(0, 0.12, 0); g.add(gl); } }
+      else { if (m.done) continue; g.add(sph(0xf4ecd8, 0, 0.05, 0, 0.12, 0.08, 0.12)); g.add(cyl(0xe8d8b8, 0.09, 0.03, 0.05, 0.08, 0.06, 0.08)); }
+      this.jprops.add(g);
+    }
+    for (const u of d.pickups || []) { const g = new THREE.Group(); g.position.set(u.x, FLOOR_H, u.z); g.add(box(0x6a4a30, 0, 0.12, 0, 0.3, 0.24, 0.26)); g.add(box(0x8a5a38, 0, 0.25, 0, 0.34, 0.03, 0.3)); g.add(box(/book|music/.test(u.item) ? 0xb84a1c : 0xd8a868, 0, 0.29, 0, 0.14, 0.05, 0.1)); const gl = glowSprite(0xffe0a0, 0.7, 0.7); gl.position.set(0, 0.4, 0); g.add(gl); this.jprops.add(g); }
+    this.windowViews = new Set();
+    for (const w of d.windows || []) {
+      this.windowViews.add(w.view); const tex = w.view === 'A' ? this.winTexA : this.winTexB;
+      const g = new THREE.Group(), nrm = { n: [0, 1], s: [0, -1], w: [1, 0], e: [-1, 0] }[w.side];
+      g.position.set(w.x + nrm[0] * 0.075, FLOOR_H + 0.74, w.z + nrm[1] * 0.075); g.rotation.y = { n: 0, s: Math.PI, w: Math.PI / 2, e: -Math.PI / 2 }[w.side];
+      const pane = new THREE.Mesh(new THREE.PlaneGeometry(0.78, 0.5), new THREE.MeshBasicMaterial({ map: tex || null, color: tex ? 0xffffff : 0x445566 })); pane.position.z = 0.004; g.add(pane);
+      const fr = 0xd0a248; g.add(box(fr, 0, 0.27, 0.02, 0.86, 0.045, 0.05, { emissive: 0x2a1a04 })); g.add(box(fr, 0, -0.27, 0.02, 0.86, 0.06, 0.07, { emissive: 0x2a1a04 })); g.add(box(fr, -0.41, 0, 0.02, 0.045, 0.54, 0.05, { emissive: 0x2a1a04 })); g.add(box(fr, 0.41, 0, 0.02, 0.045, 0.54, 0.05, { emissive: 0x2a1a04 })); g.add(box(fr, 0, 0, 0.015, 0.02, 0.5, 0.02, { emissive: 0x2a1a04 })); g.add(box(fr, 0, 0, 0.015, 0.78, 0.02, 0.02, { emissive: 0x2a1a04 }));
+      g.add(box(0xb8483a, -0.36, 0.02, 0.04, 0.1, 0.46, 0.04)); g.add(box(0xb8483a, 0.36, 0.02, 0.04, 0.1, 0.46, 0.04));
+      this.jprops.add(g);
+    }
     this.markerSprites = d.markers.map((m) => { const sp = glowSprite(0xffe08a, 0.34, 0.95); sp.position.set(m.x, FLOOR_H + (m.y || 0.9), m.z); sp.userData.base = sp.position.y; this.jprops.add(sp); return sp; });
   }
   emote(pid, kind) {
@@ -240,7 +285,12 @@ export class InsideView {
     this.controls.target.set(t.x, 0, t.z + 0.4);
     const pol = 0.95; this.camera.position.set(t.x, Math.cos(pol) * dist, t.z + 0.4 + Math.sin(pol) * dist); this.controls.update();
   }
-  resize(aspect) { this.camera.aspect = aspect; this.camera.updateProjectionMatrix(); this.jcam.aspect = aspect; this.jcam.updateProjectionMatrix(); }
+  resize(aspect) {
+    this.camera.aspect = aspect; this.camera.updateProjectionMatrix(); this.jcam.aspect = aspect; this.jcam.updateProjectionMatrix();
+    // keep the hands on screen: a tall phone screen has very little width at arm's length
+    const halfW = 0.34 * Math.tan((74 * Math.PI) / 360) * aspect, x = clamp(halfW * 0.7, 0.065, 0.2);
+    this.handR.position.x = x; this.handL.position.x = -x; this.held.position.x = x;
+  }
 
   // ---------- frame ----------
   update(dt, time) {
@@ -250,6 +300,10 @@ export class InsideView {
     const p = this.pt, t = this.ptTarget, k = 1 - Math.exp(-dt * 4.5);
     p.x += (t.x - p.x) * k; p.z += (t.z - p.z) * k; p.w += (t.w - p.w) * k; p.d += (t.d - p.d) * k;
     this.platform.position.set(p.x, -0.17, p.z); this.platform.scale.set(p.w, 0.3, p.d);
+    if (this.journey) {
+      this.reachT = Math.max(0, this.reachT - dt); const rr = this.reachT / 0.32, push = rr > 0 ? Math.sin((1 - rr) * Math.PI) * 0.09 : 0, bob = this.handsMoving ? Math.sin(this.bobPhase) * 0.006 : Math.sin(time * 1.4) * 0.002;
+      this.handsGroup.position.set(0, bob, -push); this.held.position.z = -0.5 - push * 0.4;
+    }
     if (this.journey) { this.ceiling.position.x = p.x; this.ceiling.position.z = p.z; this.ceiling.scale.set(p.w, 0.06, p.d); for (const m of this.markerSprites) m.position.y = m.userData.base + Math.sin(time * 3 + m.position.x) * 0.05; }
     // passengers
     const seen = new Set();

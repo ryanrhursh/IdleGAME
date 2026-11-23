@@ -1,5 +1,13 @@
 # Hand-off notes
 
+## Latest: more to do in Journey mode
+- **Windows:** every room with an outside wall gets a window with a live picture of the Line (scenery, weather and stations passing). Rooms with tall furniture against a wall skip that wall. Interact to look out: you are told what is out there (a landmark, a station, the region).
+- **People are solid:** you slide around passengers instead of through them, and a passenger who would walk into you waits a few seconds, then carries on, so nobody is ever stuck.
+- **Hands:** you see your own hands, and what you carry: a cup of tea (with steam), the post bag, or the thing you are fetching.
+- **More duties (nine kinds now):** *Keep a lookout* (look out of a window, then tell a passenger), *An errand* (fetch something from their favorite room, such as a book from the Library, and bring it), *Water the plants* (Garden Room), *Light the lamps* (any room), plus the earlier tea, hello, post bag, tidy and raise steam. One new chapter unlocks from looking out of windows.
+Please check: do the windows feel magical or fussy? Do the errands make you think about who likes what? Does bumping into people feel right, or do you get stuck in doorways? Frame rate with windows on a real phone (the windows are small pictures re-drawn every few frames).
+Known gaps: window views are low-resolution; the hands are simple; the first-person art is still the roughest part of the look.
+
 ## Latest: AFK mode and Journey mode
 - A button in the top bar switches between **AFK** (the game as it was: the train runs itself, steady and calm) and **Journey** (you walk the train in first person as the conductor). Same save either way.
 - **Journey:** raised walls and a ceiling, tap-to-walk or a joystick (Settings > Walking switches), drag to look, WASD plus E on a keyboard. Talk to passengers in person (you hear their tales aloud first, then ordinary chat), stoke at the conductor's post.

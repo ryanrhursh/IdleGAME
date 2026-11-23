@@ -93,10 +93,12 @@ const key = (x, y) => y * GW + x;
 const kx = (k) => k % GW, ky = (k) => Math.floor(k / GW);
 const edgeKey = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 
+const ITEMS = { library: 'a book', garden: 'a handful of flowers', workshop: 'a small brass wrench', observatory: 'a rolled star chart', bath: 'a warm towel', music: 'a sheet of music', aquarium: 'a pinch of fish food', parlor: 'a plate of biscuits' };
+export const SPOT_JOBS = { tidy: 'Tidy up', water: 'Water the plants', lamps: 'Light the lamp' };
 export class Sim {
   constructor(state, hooks = {}) {
     this.s = state; this.h = hooks; this.rt = new Map(); this.quiet = null; this.t = { lore: 0 };
-    this.speed = 0; this.version = 0; this.journey = false; this.carry = null;
+    this.speed = 0; this.version = 0; this.journey = false; this.carry = null; this.conductor = null;
     this.index();
   }
   ev(name, a, b) {
@@ -136,7 +138,7 @@ export class Sim {
         const nx = x + dx, ny = y + dy, nk = nx >= 0 && ny >= 0 && nx < GW && ny < GH ? key(nx, ny) : -1, q = nk >= 0 ? this.tile.get(nk) : undefined;
         if (q === rid) continue;
         if (q !== undefined) { if (this.doors.has(edgeKey(k, nk))) continue; if (q < rid) continue; }
-        this.walls.push({ x, y, side });
+        this.walls.push({ x, y, side, outer: q === undefined });
       }
     }
     this.beds = s.rooms.filter((r) => r.type === 'sleeper').reduce((a, r) => a + Math.floor((r.w * r.h) / 3), 0);
@@ -264,19 +266,62 @@ export class Sim {
   urns() { return this.s.rooms.filter((r) => r.type === 'dining').map((r) => ({ rid: r.id, x: r.x + 0.4, z: r.y + 0.4 })); }
   setJourney(on) { this.journey = !!on; if (!on) this.carry = null; }
 
+  // ---------- windows onto the Line, and things worth fetching ----------
+  windows() {
+    if (this._winV === this.version) return this._win;
+    const out = [];
+    for (const r of this.s.rooms) {
+      const segs = this.walls.filter((w) => w.outer && this.tile.get(key(w.x, w.y)) === r.id), by = {};
+      for (const w of segs) (by[w.side] = by[w.side] || []).push(w);
+      const tall = { library: 'n', workshop: 's', aquarium: 'n' }[r.type];      // furniture stands against that wall
+      const lists = Object.entries(by).filter(([side]) => side !== tall).map(([, l]) => l).sort((a, b) => b.length - a.length); if (!lists.length) continue;
+      const list = lists[0].sort((a, b) => (a.x - b.x) || (a.y - b.y));
+      const picks = r.type === 'corridor' && list.length >= 6 ? [Math.floor(list.length * 0.25), Math.floor(list.length * 0.75)] : [Math.floor(list.length / 2)];
+      for (const i of picks) {
+        if (out.length >= 10) break; const w = list[i];
+        out.push({ x: w.side === 'e' ? w.x + 1 : w.side === 'w' ? w.x : w.x + 0.5, z: w.side === 's' ? w.y + 1 : w.side === 'n' ? w.y : w.y + 0.5, side: w.side, view: w.side === 'n' || w.side === 'w' ? 'A' : 'B', rid: r.id });
+      }
+    }
+    this._win = out; this._winV = this.version; return out;
+  }
+  outsideText() {
+    const s = this.s, L = s.line, reg = this.region(), cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+    if (L.pending) return `The Marigold is standing at ${L.pending.name}. Someone is waiting on the platform.`;
+    const lm = landmarkFor(L.seed, L.nextLandmark);
+    if (L.nextLandmark - s.miles < 4) return `${cap(LANDMARKS[lm.idx])} is coming up, out in the ${reg.name}.`;
+    if (L.nextStop - s.miles < 3) return `A station is coming up. The sign says ${stopName(L.seed, L.stopIndex)}.`;
+    return `The ${reg.name} going by, all ${reg.hint}.`;
+  }
+  pickups() { return this.s.rooms.filter((r) => ITEMS[r.type]).map((r) => ({ rid: r.id, type: r.type, item: ITEMS[r.type], x: r.x + r.w - 0.4, z: r.y + 0.4 })); }
+
   // ---------- duties: small jobs only the conductor can do in person ----------
   jobKinds() {
     const s = this.s, ks = ['stoke'];
     if (s.passengers.length) { ks.push('checkin', 'post'); if (s.rooms.some((r) => r.type === 'dining')) ks.push('tea'); }
     if (s.rooms.some((r) => r.type !== 'corridor' && r.type !== 'sleeper')) ks.push('tidy');
+    if (s.rooms.some((r) => r.type === 'garden')) ks.push('water');
+    if (s.rooms.some((r) => r.w * r.h >= 4 && r.type !== 'corridor')) ks.push('lamps');
+    if (s.passengers.length && this.windows().length) ks.push('lookout');
+    if (s.passengers.some((p) => this.fetchFor(p))) ks.push('fetch');
     return ks;
   }
+  fetchFor(p) { const hr = HOBBY_ROOM[defOf(p).hobby] || 'parlor', room = this.s.rooms.find((r) => r.type === hr); return room && ITEMS[hr] ? { room, item: ITEMS[hr] } : null; }
   newJob(kind) {
     const s = this.s, J = s.jobs, pick = (a) => a[Math.floor(Math.random() * a.length)], ps = s.passengers;
     const job = { id: J.id++, kind, prog: 0, goal: 1, data: {}, flavor: pick(JOB_FLAVOR[kind]) };
     if (kind === 'tea') { job.goal = Math.min(3, Math.max(1, ps.length)); job.title = 'Tea service'; job.desc = `Pour tea at the urn in a dining car, and serve ${job.goal} ${job.goal === 1 ? 'passenger' : 'passengers'}.`; job.data = { served: [] }; }
     else if (kind === 'checkin') { job.goal = Math.min(3, ps.length); job.title = 'Say hello'; job.desc = `Stop and talk with ${job.goal} ${job.goal === 1 ? 'passenger' : 'different passengers'}.`; job.data = { met: [] }; }
     else if (kind === 'post') { const t = pick(ps); job.title = 'The post bag'; job.desc = `Take the post bag from the conductor's post to ${t.name}.`; job.data = { to: t.id, name: t.name }; }
+    else if (kind === 'lookout') { job.title = 'Keep a lookout'; job.desc = 'Look out of a window, then tell a passenger what you saw.'; job.data = { seen: null }; }
+    else if (kind === 'fetch') {
+      const opts = ps.map((p) => ({ p, f: this.fetchFor(p) })).filter((o) => o.f), o = pick(opts);
+      job.title = 'An errand'; job.desc = `Bring ${o.p.name.split(' ')[0]} ${o.f.item} from the ${ROOMS[o.f.room.type].name}.`; job.data = { to: o.p.id, name: o.p.name, rid: o.f.room.id, item: o.f.item };
+    } else if (kind === 'water' || kind === 'lamps') {
+      const rooms = kind === 'water' ? s.rooms.filter((r) => r.type === 'garden') : s.rooms.filter((r) => r.w * r.h >= 4 && r.type !== 'corridor'), r = pick(rooms), spots = [];
+      const cand = [(i) => ({ x: r.x + 0.5 + Math.random() * (r.w - 1), z: r.y + 0.22 }), () => ({ x: r.x + 0.5 + Math.random() * (r.w - 1), z: r.y + r.h - 0.22 }), () => ({ x: r.x + 0.22, z: r.y + 0.5 + Math.random() * (r.h - 1) }), () => ({ x: r.x + r.w - 0.22, z: r.y + 0.5 + Math.random() * (r.h - 1) })].sort(() => Math.random() - 0.5);
+      for (let k = 0; k < 3; k++) spots.push({ ...(kind === 'water' ? { x: r.x + 0.3 + Math.random() * (r.w - 0.6), z: r.y + 0.3 + Math.random() * (r.h - 0.6) } : cand[k]()), done: false });
+      job.goal = 3; job.title = kind === 'water' ? 'Water the plants' : 'Light the lamps'; job.desc = kind === 'water' ? 'The plants in the Garden Room are looking thirsty.' : `Light three lamps in the ${ROOMS[r.type].name}.`; job.data = { rid: r.id, spots };
+    }
     else if (kind === 'tidy') {
       const rooms = s.rooms.filter((r) => r.type !== 'corridor' && r.type !== 'sleeper'), r = pick(rooms), spots = [];
       for (let k = 0; k < 3; k++) spots.push({ x: r.x + 0.3 + Math.random() * (r.w - 0.6), z: r.y + 0.3 + Math.random() * (r.h - 0.6), done: false });
@@ -289,7 +334,9 @@ export class Sim {
     const s = this.s;
     if (job.kind === 'post') return s.passengers.some((p) => p.id === job.data.to);
     if (job.kind === 'tea' || job.kind === 'checkin') return s.passengers.length > 0 && (job.kind === 'checkin' || s.rooms.some((r) => r.type === 'dining'));
-    if (job.kind === 'tidy') return this.roomById.has(job.data.rid);
+    if (job.kind === 'tidy' || job.kind === 'water' || job.kind === 'lamps') return this.roomById.has(job.data.rid);
+    if (job.kind === 'lookout') return s.passengers.length > 0 && this.windows().length > 0;
+    if (job.kind === 'fetch') return s.passengers.some((p) => p.id === job.data.to) && this.roomById.has(job.data.rid);
     return true;
   }
   ensureJobs() {
@@ -318,13 +365,27 @@ export class Sim {
       const job = find('checkin'); if (!job || job.data.met.includes(data.pid)) return null;
       job.data.met.push(data.pid); job.prog++; if (job.prog >= job.goal) this.completeJob(job); else this.ev('jobs'); return null;
     }
-    if (type === 'tidy') {
-      const job = find('tidy'); if (!job) return null; const sp = job.data.spots[data.i]; if (!sp || sp.done) return null;
-      sp.done = true; job.prog++; if (job.prog >= job.goal) this.completeJob(job); else this.ev('jobs'); return 'Tidied.';
+    if (type === 'spot' || type === 'tidy') {
+      const job = find(data.kind || 'tidy'); if (!job) return null; const sp = job.data.spots[data.i]; if (!sp || sp.done) return null;
+      sp.done = true; job.prog++; if (job.prog >= job.goal) this.completeJob(job); else this.ev('jobs'); return { tidy: 'Tidied.', water: 'The plant perks up.', lamps: 'The lamp glows.' }[job.kind];
+    }
+    if (type === 'take') { const job = find('fetch'); if (job && !this.carry && data.rid === job.data.rid) { this.carry = { kind: 'item', item: job.data.item, to: job.data.to }; return `You take ${job.data.item}.`; } return this.carry ? 'Your hands are full.' : null; }
+    if (type === 'look') {
+      this.s.looks = (this.s.looks || 0) + 1; this.checkProgress(); const job = find('lookout');
+      if (job && !job.data.seen) { job.data.seen = data.text || 'something'; this.ev('jobs'); return 'You take it in. Someone ought to hear about this.'; } return null;
+    }
+    if (type === 'tell') {
+      const job = find('lookout'); if (!job || !job.data.seen) return null; const p = this.s.passengers.find((q) => q.id === data.pid); if (!p) return null;
+      this.addMood(p, 4); this.completeJob(job); return `${p.name.split(' ')[0]} leans toward the glass too. "So it is. Thank you for telling me."`;
     }
     if (type === 'stoke') { const job = find('stoke'); if (job && this.s.pressure >= job.data.target) { this.completeJob(job); } return null; }
     if (type === 'bag') { const job = find('post'); if (job && !this.carry) { this.carry = { kind: 'post', to: job.data.to }; return `You take the post bag. It is addressed to ${job.data.name}.`; } return this.carry ? 'Your hands are full.' : 'There is no post today.'; }
-    if (type === 'deliver') { const job = find('post'); if (job && this.carry && this.carry.kind === 'post' && this.carry.to === data.pid) { job.prog = 1; const p = this.s.passengers.find((q) => q.id === data.pid); if (p) this.addMood(p, 6); this.completeJob(job); return 'Delivered.'; } return null; }
+    if (type === 'deliver') {
+      const c = this.carry; if (!c || c.to !== data.pid) return null;
+      const job = find(c.kind === 'item' ? 'fetch' : 'post'); if (!job) return null;
+      const p = this.s.passengers.find((q) => q.id === data.pid); if (p) this.addMood(p, 6);
+      this.completeJob(job); return 'Delivered.';
+    }
     return null;
   }
   // Talking in person: unheard tales come first, then ordinary chat.
@@ -397,6 +458,11 @@ export class Sim {
       const nk = rt.path[rt.i + 1];
       if (nk === undefined) { rt.state = 'use'; return; }
       const tx = kx(nk) + 0.5, ty = ky(nk) + 0.5, dx = tx - p.x, dy = ty - p.y, dist = Math.hypot(dx, dy), step = 1.7 * dt;
+      const cd = this.conductor;
+      if (cd && dist > 1e-4) {
+        const mv = Math.min(step, dist), ax = p.x + (dx / dist) * mv, ay = p.y + (dy / dist) * mv, dn = Math.hypot(ax - cd.x, ay - cd.z);
+        if (dn < 0.42 && dn < Math.hypot(p.x - cd.x, p.y - cd.z)) { rt.hold = (rt.hold || 0) + dt; if (rt.hold < 3) return; } else rt.hold = 0;
+      }
       if (dist > 0.001) rt.face = Math.atan2(dx, dy);
       if (dist <= step) { p.x = tx; p.y = ty; rt.i++; if (rt.i >= rt.path.length - 1) { rt.state = 'use'; } }
       else { p.x += (dx / dist) * step; p.y += (dy / dist) * step; }
@@ -521,7 +587,7 @@ export class Sim {
   }
   loreCtx() {
     const s = this.s;
-    return { miles: s.miles, aboard: s.passengers.length, met: s.metCount, unfolds: s.unfolds, rooms: s.rooms.length, keepsakes: s.keepsakes.length, postcards: s.postcards.length, tickets: s.tickets.length, tales: s.talesHeard || 0, returns: s.returns || 0, letters: s.lettersGot || 0, jobs: (s.jobs && s.jobs.done) || 0, levels: s.rooms.reduce((a, r) => a + (r.lv || 0), 0) };
+    return { miles: s.miles, aboard: s.passengers.length, met: s.metCount, unfolds: s.unfolds, rooms: s.rooms.length, keepsakes: s.keepsakes.length, postcards: s.postcards.length, tickets: s.tickets.length, tales: s.talesHeard || 0, returns: s.returns || 0, letters: s.lettersGot || 0, jobs: (s.jobs && s.jobs.done) || 0, looks: s.looks || 0, levels: s.rooms.reduce((a, r) => a + (r.lv || 0), 0) };
   }
   loreProgress(e) {
     const ks = Object.keys(e.need); if (!ks.length) return 1;
