@@ -323,9 +323,9 @@ export class InsideView {
     const pol = 0.95; this.camera.position.set(t.x, Math.cos(pol) * dist, t.z + 0.4 + Math.sin(pol) * dist); this.controls.update();
   }
   resize(aspect) {
-    this.camera.aspect = aspect; this.camera.updateProjectionMatrix(); this.jcam.aspect = aspect; this.jcam.updateProjectionMatrix();
+    this.camera.aspect = aspect; this.camera.updateProjectionMatrix(); this.jcam.aspect = aspect; this.jcam.fov = aspect < 1 ? 92 : 80; this.jcam.updateProjectionMatrix();   // a little wider than before, and wider still on tall phone screens
     // keep the hands on screen: a tall phone screen has very little width at arm's length
-    const halfW = 0.34 * Math.tan((74 * Math.PI) / 360) * aspect, x = clamp(halfW * 0.7, 0.065, 0.2);
+    const halfW = 0.34 * Math.tan((this.jcam.fov * Math.PI) / 360) * aspect, x = clamp(halfW * 0.7, 0.065, 0.2);
     this.handR.position.x = x; this.handL.position.x = -x; this.held.position.x = x;
   }
 

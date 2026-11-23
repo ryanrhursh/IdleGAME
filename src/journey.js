@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { clamp, SPOT_JOBS, firstOf } from './logic.js';
 
-const EYE = 0.6, SPEED = 2.3, REACH = 1.45;
+const EYE = 0.6, SPEED = 1.6, REACH = 1.45;
 
 export class Journey {
   constructor(world, sim, ui) {

@@ -71,7 +71,7 @@ function mouseUi() {
   $('cross').hidden = !(j && (journey.locked || journey.hover));
   $('lockHint').hidden = !(j && !journey.locked && !journey.hover && !state.lockSeen);
 }
-function applyControls() { mouseUi(); $('stick').hidden = !(view === 'journey' && state.controls !== 'tap'); }
+function applyControls() { mouseUi(); const st = view === 'journey' && state.controls !== 'tap'; $('stick').hidden = !st; document.body.dataset.stick = st ? '1' : '0'; }
 function renderDuties() {
   const el = $('duties'); if (view !== 'journey') { el.hidden = true; return; }
   const J = state.jobs.list;

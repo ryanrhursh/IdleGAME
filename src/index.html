@@ -208,6 +208,7 @@ body[data-mode="journey"] #milePill { display: none; }
 #actBtn { position: fixed; right: calc(var(--sar) + 16px); bottom: calc(var(--sab) + 96px); max-width: min(240px, 52vw); padding: 14px 18px; border-radius: 99px; background: var(--gold); color: var(--gold-ink); font-weight: 700; font-size: 15px; line-height: 1.2; text-align: center; box-shadow: 0 3px 0 rgba(0,0,0,.35), 0 0 22px rgba(242, 177, 52, .5); z-index: 8; touch-action: none; animation: pulse 1.8s ease-in-out infinite; }
 body[data-mode="journey"] #pageNote, body[data-mode="journey"] #chapterBanner { top: calc(var(--sat) + 196px); }
 body[data-mode="journey"] #stoke { bottom: calc(var(--sab) + 150px); }
+body[data-mode="journey"][data-stick="1"] #stoke { left: auto; right: calc(var(--sar, 0px) + 12px); transform: none; width: min(300px, calc(100vw - 190px)); }
 
 
 #cross { position: fixed; left: 50%; top: 50%; width: 14px; height: 14px; transform: translate(-50%, -50%); border-radius: 50%; border: 2px solid rgba(255, 244, 220, .85); box-shadow: 0 0 0 1px rgba(40, 24, 12, .55), 0 0 8px rgba(255, 224, 160, .6); pointer-events: none; z-index: 7; }
