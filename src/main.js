@@ -55,6 +55,7 @@ const jui = {
   note(msg) { toast(esc(msg)); },
   prompt(n) { const b = $('actBtn'); if (n) { b.textContent = n.label; b.hidden = false; } else b.hidden = true; },
   console(near) { if (view === 'journey') $('stoke').hidden = !near; },
+  lock(on) { if (on) state.lockSeen = true; mouseUi(); },
 };
 journey = new Journey(world, sim, jui);
 window.__game.journey = journey;
@@ -62,7 +63,13 @@ let lastInputWrite = 0;
 function markInput() { const n = Date.now(); if (n - lastInputWrite > 1000) { state.lastInput = n; lastInputWrite = n; } }
 ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart'].forEach((ev) => addEventListener(ev, markInput, { passive: true }));
 markInput();
-function applyControls() { $('stick').hidden = !(view === 'journey' && state.controls === 'stick'); }
+const finePointer = matchMedia('(hover: hover) and (pointer: fine)').matches;
+function mouseUi() {
+  const j = view === 'journey' && finePointer && state.mouselook !== false;
+  $('cross').hidden = !(j && (journey.locked || journey.hover));
+  $('lockHint').hidden = !(j && !journey.locked && !journey.hover && !state.lockSeen);
+}
+function applyControls() { mouseUi(); $('stick').hidden = !(view === 'journey' && state.controls === 'stick'); }
 function renderDuties() {
   const el = $('duties'); if (view !== 'journey') { el.hidden = true; return; }
   const J = state.jobs.list;
@@ -85,7 +92,7 @@ function showHint() {
 
 // ---------- modals ----------
 const modal = $('modal'); let modalOpen = false; const modalQ = [];
-function openModal(html, onClose) { modal.innerHTML = `<div class="card">${html}</div>`; modal.hidden = false; modalOpen = true; modal._onClose = onClose; sheetHide(); }
+function openModal(html, onClose) { if (journey) journey.releaseLock(); modal.innerHTML = `<div class="card">${html}</div>`; modal.hidden = false; modalOpen = true; modal._onClose = onClose; sheetHide(); }
 function closeModal() { modal.hidden = true; modalOpen = false; const f = modal._onClose; modal._onClose = null; if (f) f(); const next = modalQ.shift(); if (next) next(); }
 function queueModal(fn) { if (modalOpen) modalQ.push(fn); else fn(); }
 modal.addEventListener('click', (e) => { if (e.target === modal && !modal.querySelector('[data-nodismiss]')) closeModal(); });
@@ -166,7 +173,7 @@ $('modeBtn').onclick = () => { if (!modalOpen) setGameMode(state.mode === 'journ
 function journeyIntro() {
   openModal(`<div class="head">${portrait(7, 76)}<div><div class="eyebrow">Journey mode</div><h2>The conductor on foot</h2></div></div>
   <p class="dropcap">You can walk the Marigold yourself. Stand among your passengers, hear their tales in person, and see to the small duties that keep a train warm.</p>
-  <p>${state.controls === 'stick' ? 'Use the stick to walk and drag the screen to look.' : 'Tap anywhere on the floor to walk there, and drag to look around.'} On a keyboard, use W A S D and E. Gold lights mark what your duties need.</p>
+  <p>${state.controls === 'stick' ? 'Use the stick to walk and drag the screen to look.' : 'Tap anywhere on the floor to walk there, and drag to look around.'} On a computer, click the view to look around with your mouse (press Esc to let go and use the buttons), and use W A S D and E. Gold lights mark what your duties need.</p>
   <p>While you are walking your train, it earns a quarter more, and each finished duty pays Charm. Step back to AFK at any time and she will run herself, steady and calm. After half an hour without a touch, she does it for you.</p>
   <div class="row2"><button class="btn" id="go">Take the cap</button></div>`);
   $('go').onclick = closeModal;
@@ -318,6 +325,7 @@ function renderBook(flip) {
 function menuModal() {
   openModal(`<div class="eyebrow">Settings</div><h2>The Marigold Line</h2>
   <div class="row2"><button class="btn ghost" id="snd">Sound: ${audio.enabled ? 'on' : 'off'}</button><button class="btn ghost" id="rc">Recentre the view</button></div>
+  <div class="row2"><button class="btn ghost" id="ml">Mouse look: ${state.mouselook === false ? 'off' : 'on'} (change)</button></div>
   <div class="row2"><button class="btn ghost" id="ctl">Walking: ${state.controls === 'stick' ? 'joystick' : 'tap to walk'} (change)</button></div>
   <div class="row2"><button class="btn ghost" id="look">Look: ${esc(LOOK.name)} (change)</button></div>
   <div class="row2"><button class="btn ghost" id="gfx">Graphics: ${({ low: 'Low (faster)', high: 'High', undefined: 'Auto' })[state.gfx]}</button></div>
@@ -329,6 +337,7 @@ function menuModal() {
   $('snd').onclick = (e) => { audio.enabled = !audio.enabled; state.sound = audio.enabled; audio.apply(); e.target.textContent = 'Sound: ' + (audio.enabled ? 'on' : 'off'); };
   $('rc').onclick = () => { world.line.recentre(world.aspect); world.inside.fit(world.aspect); closeModal(); };
   $('auto').onclick = (e) => { state.auto = !state.auto; e.target.textContent = `While I'm away, welcome travellers: ${state.auto ? 'yes' : 'no'}`; };
+  $('ml').onclick = (e) => { state.mouselook = state.mouselook === false; e.target.textContent = `Mouse look: ${state.mouselook === false ? 'off' : 'on'} (change)`; if (state.mouselook === false) journey.releaseLock(); mouseUi(); };
   $('ctl').onclick = (e) => { state.controls = state.controls === 'stick' ? 'tap' : 'stick'; e.target.textContent = `Walking: ${state.controls === 'stick' ? 'joystick' : 'tap to walk'} (change)`; applyControls(); };
   $('look').onclick = () => { const ids = Object.keys(LOOKS), next = ids[(ids.indexOf(LOOK_ID) + 1) % ids.length]; save(); saveLook(next); location.href = location.pathname + location.hash; };
   $('gfx').onclick = (e) => { const order = [undefined, 'low', 'high'], i = (order.indexOf(state.gfx) + 1) % 3; state.gfx = order[i]; world.setGfx(state.gfx || 'auto'); e.target.textContent = 'Graphics: ' + ({ low: 'Low (faster)', high: 'High', undefined: 'Auto' })[state.gfx]; };
@@ -447,12 +456,19 @@ canvas.addEventListener('pointerdown', (e) => {
 canvas.addEventListener('pointermove', (e) => {
   if (!ptr || ptr.id !== e.pointerId) return;
   if (Math.hypot(e.clientX - ptr.x, e.clientY - ptr.y) > 9) ptr.moved = true;
-  if (view === 'journey') { if (ptr.moved) journey.turn(e.clientX - ptr.lx, e.clientY - ptr.ly); ptr.lx = e.clientX; ptr.ly = e.clientY; return; }
+  if (view === 'journey') { if (ptr.moved && !journey.locked) journey.turn(e.clientX - ptr.lx, e.clientY - ptr.ly); ptr.lx = e.clientX; ptr.ly = e.clientY; return; }
   if (drawing && view === 'inside') updateDraw(e.clientX, e.clientY);
 });
 canvas.addEventListener('pointerup', (e) => {
   if (!ptr || ptr.id !== e.pointerId) return; const p = ptr; ptr = null;
-  if (view === 'journey') { if (!p.moved && e.timeStamp - p.t < 450) journey.tap(e.clientX, e.clientY); return; }
+  if (view === 'journey') {
+    if (e.pointerType === 'mouse' && finePointer && state.mouselook !== false) {
+      if (journey.locked) journey.tapCenter(); else if (!journey.hover) journey.requestLock(); else if (!p.moved && e.timeStamp - p.t < 450) journey.tap(e.clientX, e.clientY);
+      return;
+    }
+    if (!p.moved && e.timeStamp - p.t < 450) journey.tap(e.clientX, e.clientY);
+    return;
+  }
   if (drawing && view === 'inside') { commitDraw(); return; }
   if (!p.moved && e.timeStamp - p.t < 450) tap(e.clientX, e.clientY);
 });

@@ -209,6 +209,10 @@ body[data-mode="journey"] #milePill { display: none; }
 body[data-mode="journey"] #pageNote, body[data-mode="journey"] #chapterBanner { top: calc(var(--sat) + 196px); }
 body[data-mode="journey"] #stoke { bottom: calc(var(--sab) + 150px); }
 
+
+#cross { position: fixed; left: 50%; top: 50%; width: 14px; height: 14px; transform: translate(-50%, -50%); border-radius: 50%; border: 2px solid rgba(255, 244, 220, .85); box-shadow: 0 0 0 1px rgba(40, 24, 12, .55), 0 0 8px rgba(255, 224, 160, .6); pointer-events: none; z-index: 7; }
+#lockHint { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--sab) + 84px); padding: 8px 16px; border-radius: 99px; background: var(--glass2); border: 1px solid var(--gold); font-size: 14px; pointer-events: none; z-index: 7; text-align: center; max-width: calc(100vw - 24px); }
+
 /* ---------- the storybook ---------- */
 #chapterBanner { position: fixed; left: 50%; transform: translateX(-50%); top: calc(var(--sat) + 74px); width: min(420px, calc(100vw - 28px)); text-align: center; display: grid; gap: 2px; pointer-events: none; padding: 12px 18px 14px; background: #f7ecd4; color: #3a2616; border: 2px solid #8a5a34; border-radius: 6px 16px 8px 18px; box-shadow: 3px 5px 0 rgba(60, 36, 20, .5); font-family: "IM Fell English", Georgia, serif; z-index: 8; }
 #chapterBanner.show { animation: chap 6.2s ease-out forwards; }
@@ -289,6 +293,8 @@ body:not([data-look="storybook"]) .book .spine small, body:not([data-look="story
 <div id="speech" hidden></div>
 <div id="stick" hidden aria-hidden="true"><i id="knob"></i></div>
 <button id="actBtn" hidden></button>
+<div id="cross" hidden aria-hidden="true"></div>
+<div id="lockHint" hidden>Click the view, then move your mouse to look around. Esc lets go, so you can use the buttons.</div>
 <div id="sheet" hidden></div>
 <div id="drawcost" hidden></div>
 
