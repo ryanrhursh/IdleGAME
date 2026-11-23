@@ -1,5 +1,10 @@
 # Hand-off notes
 
+## Latest: the look (storybook polish)
+- **Inside:** every room now has its own wallpaper tint (instance colours on a striped, flowered, dado-railed wallpaper texture); door posts everywhere and lintels in first person; framed pictures on about a third of the walls in sleepers, dining cars, parlors, corridors and the music room (first person only, never over a window); round rugs under dining tables and a rug and potted plant in sleepers.
+- **Outside:** telegraph poles with wire running beside the track, round bushes at the track edge (tinted by the region palette), drifting clouds, and a few birds. These sit outside the region-weight system, so existing worlds are unchanged.
+- Nothing here changes rules or saves.
+
 ## Latest: richer passengers
 - **Wishes.** Everyone carries one hope (build a bigger Garden, furnish a room to level 2-3, see N new regions, make a friend). It is revealed once they feel at home (mood 30), shown in People / the Book with a progress bar, and granted automatically (+120 Charm, mood up, slip + postcard). If they leave without it, the farewell is wistful, never punishing, and a returning guest brings the wish back.
 - **Friends and rivals.** Pairs are fixed for the 15 authored folk (see `RELATIONS` in `data.js`) and hashed for everyone else (~14% friends, ~8% rivals). The stop card hints at who they would get on with. Friends sharing a room build a bond (+mood, +20% Charm); rivals sharing a room eventually squabble (toast + orange spark). In Journey, **talk to either one** to make peace (+40 Charm); in AFK mode it blows over on its own.
@@ -69,6 +74,7 @@ State of the game after the overnight build. Branch: `claude/jolly-goodall-vx6xf
 - [ ] Sound: tap once, then check the chuff, whistle and chime sounds are pleasant, and the Sound toggle works.
 - [ ] Add to Home Screen, open from the icon. Full screen? Does the save carry over?
 - [ ] Fork: do you notice the signs and the choice banner? Is it clear what the choice does?
+- [ ] The look: does the inside feel cosier in first person (wallpaper, frames, door posts)? Do poles and bushes outside add life or clutter? Frame rate on your phone vs before (Settings > Graphics: Low still works)?
 - [ ] Richer passengers: do wishes feel like a gentle goal or like homework? Is the reveal (mood 30) timed well? Does the wistful farewell land?
 - [ ] Friends and rivals: do the stop-card hints ("would get on well with / might clash with") make inviting feel like a choice? Does "talk to them" in Journey make peace clearly enough?
 - [ ] Odd guests: invite Hortensia (needs 2 berths) with a full train and check the message; does the ghost/dragon (no berth) feel special?

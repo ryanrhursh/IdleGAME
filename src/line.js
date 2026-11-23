@@ -111,6 +111,7 @@ export class LineView {
       this.props.push({ im, slots, mat }); tintMats.push(mat);
     }
     this.tintMats = tintMats;
+    this.buildDecor();
     this.dummy = new THREE.Object3D(); this.col = new THREE.Color();
     // train, stations, fork gantry, smoke, weather
     this.buildTrain(); this.stations = [this.makeStation(), this.makeStation()]; this.stationFor = [-1, -1];
@@ -130,6 +131,44 @@ export class LineView {
     c.minDistance = 14; c.maxDistance = 46; c.minAzimuthAngle = -2.35; c.maxAzimuthAngle = -0.75; c.minPolarAngle = 0.95; c.maxPolarAngle = 1.5; c.enabled = true;
     c.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE };
     this.wheelAng = 0; this.smokeT = 0;
+  }
+
+  // ---------- little things that make the world feel lived in: poles and wire, bushes, clouds, birds ----------
+  buildDecor() {
+    const scene = this.scene, P = [];
+    const cy = (r0, r1, h, x, y, z, hex) => P.push(colored(at(new THREE.CylinderGeometry(r0, r1, h, 6), x, y, z), hex));
+    cy(0.07, 0.1, 4.2, 0, 2.1, 0, 0x6a4a34); P.push(colored(at(new THREE.BoxGeometry(1.5, 0.1, 0.12), 0, 3.95, 0), 0x5a3e2a)); P.push(colored(at(new THREE.BoxGeometry(1.0, 0.09, 0.1), 0, 3.5, 0), 0x5a3e2a));
+    for (const x of [-0.65, 0.65, -0.4, 0.4]) cy(0.04, 0.04, 0.16, x, x < -0.5 || x > 0.5 ? 4.05 : 3.6, 0, 0xd8d0c0);
+    this.nPole = 44; this.poleSp = 15; this.poles = new THREE.InstancedMesh(mergeGeometries(P), new THREE.MeshToonMaterial({ vertexColors: true, color: 0xffffff, gradientMap: null }), this.nPole); this.poles.frustumCulled = false; this.poles.castShadow = LOOK.shadows; scene.add(this.poles);
+    const wp = []; for (const [dx, y] of [[-0.65, 4.0], [0.65, 4.0], [-0.4, 3.55], [0.4, 3.55]]) wp.push(3.7 + dx, y, -90, 3.7 + dx, y, 470);
+    const wg = new THREE.BufferGeometry(); wg.setAttribute('position', new THREE.Float32BufferAttribute(wp, 3)); this.wires = new THREE.LineSegments(wg, new THREE.LineBasicMaterial({ color: 0x2a2030 })); this.wires.frustumCulled = false; scene.add(this.wires);
+    // bushes
+    const B = [], ball = (r, x, y, z, hex) => B.push(colored(at(new THREE.IcosahedronGeometry(r, 1), x, y, z, 1, 0.75, 1), hex));
+    ball(0.55, 0, 0.4, 0, 0xffffff); ball(0.4, 0.5, 0.3, 0.15, 0xeeeeee); ball(0.35, -0.45, 0.28, -0.1, 0xf6f6f6); ball(0.3, 0.1, 0.55, 0.3, 0xffffff);
+    this.nBush = 120; this.bushMat = new THREE.MeshToonMaterial({ vertexColors: true, color: 0xffffff, gradientMap: null });
+    this.bushes = new THREE.InstancedMesh(mergeGeometries(B), this.bushMat, this.nBush); this.bushes.frustumCulled = false; this.bushes.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(this.nBush * 3), 3); scene.add(this.bushes);
+    this.bushSlots = []; for (let i = 0; i < this.nBush; i++) this.bushSlots.push({ z0: (i / this.nBush) * RANGE + hash('b' + i) % 5, lap: -999, x: 0, s: 1, rot: 0 });
+    // clouds
+    this.clouds = []; const cr = rng(31);
+    for (let i = 0; i < 9; i++) { const sp = glowSprite(0xffffff, 1, 0.5); sp.material.blending = THREE.NormalBlending; sp.material.fog = false; const w = 50 + cr() * 60; sp.scale.set(w, w * 0.32, 1); sp.position.set(-170 + cr() * 340, 22 + cr() * 22, 120 + cr() * 220); sp.userData = { v: 0.4 + cr() * 0.9 }; scene.add(sp); this.clouds.push(sp); }
+    // birds
+    this.birds = []; const bm = new THREE.MeshBasicMaterial({ color: 0x2a2030, side: THREE.DoubleSide, fog: false });
+    const wing = new THREE.BufferGeometry(); wing.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 0.5, 0.05, 0.12, 0.5, 0.05, -0.12], 3)); wing.computeVertexNormals();
+    for (let i = 0; i < 7; i++) { const g = new THREE.Group(), l = new THREE.Mesh(wing, bm), r = new THREE.Mesh(wing, bm); r.scale.x = -1; g.add(l, r); g.userData = { l, r, ph: i * 1.7, x: -20 + (i % 4) * 10 + (i > 3 ? 18 : 0), y: 9 + (i * 1.3) % 6, z: -10 + i * 14, v: 5 + (i % 3) }; g.scale.setScalar(1.6); scene.add(g); this.birds.push(g); }
+  }
+  updateDecor(dt, time, scroll) {
+    const d = this.dummy;
+    for (let i = 0; i < this.nPole; i++) { const z = (((i * this.poleSp - scroll) % (this.nPole * this.poleSp)) + this.nPole * this.poleSp) % (this.nPole * this.poleSp) - 90; d.position.set(3.7, 0, z); d.rotation.set(0, 0, 0); d.scale.set(1, 1, 1); d.updateMatrix(); this.poles.setMatrixAt(i, d.matrix); }
+    this.poles.instanceMatrix.needsUpdate = true;
+    const w = this.weights; 
+    for (let i = 0; i < this.nBush; i++) {
+      const sl = this.bushSlots[i], t = sl.z0 - scroll, lap = Math.floor(t / RANGE);
+      if (lap !== sl.lap) { sl.lap = lap; const r = rng(hash(`bush:${i}:${lap}`)); sl.x = (r() < 0.5 ? -1 : 1) * (3.4 + Math.pow(r(), 1.7) * 16); sl.s = 0.8 + r() * 1.1; sl.rot = r() * 6.28; const b = 0.7 + r() * 0.5; this.col.setRGB(b, b, b); this.bushes.setColorAt(i, this.col); }
+      const z = (((t % RANGE) + RANGE) % RANGE) - BACK; d.position.set(sl.x, 0, z); d.rotation.set(0, sl.rot, 0); d.scale.setScalar(sl.s); d.updateMatrix(); this.bushes.setMatrixAt(i, d.matrix);
+    }
+    this.bushes.instanceMatrix.needsUpdate = true; this.bushes.instanceColor.needsUpdate = true;
+    for (const c of this.clouds) { c.position.x += c.userData.v * dt; if (c.position.x > 190) c.position.x = -190; }
+    for (const b of this.birds) { const u = b.userData; u.z += u.v * dt; if (u.z > 120) u.z = -30; const f = Math.sin(time * 9 + u.ph) * 0.7; u.l.rotation.z = f; u.r.rotation.z = -f; b.position.set(u.x + Math.sin(time * 0.4 + u.ph) * 3, u.y + Math.sin(time * 0.9 + u.ph) * 0.6, u.z); b.rotation.y = Math.PI / 2 + Math.sin(time * 0.4 + u.ph) * 0.2; }
   }
 
   // ---------- train ----------
@@ -235,6 +274,7 @@ export class LineView {
     this.scene.fog.color.copy(p.fog).lerp(p.skyBot, 0.6); this.ground.material.color.copy(p.ground).lerp(p.tint, 0.16).multiplyScalar(1.5);
     this.ridges.forEach((r, i) => r.material.color.copy(p.ridge).multiplyScalar(1.25).lerp(p.skyBot, 0.18 + i * 0.22));
     this.tintMats.forEach((m, k) => { if (k !== 4) { m.color.copy(p.tint).lerp(new THREE.Color(0xffffff), k === 5 ? 0.3 : 0.1); if (k === 5) m.color.multiplyScalar(1.5); else if (k === 3) m.color.multiplyScalar(0.9); else m.color.multiplyScalar(0.75); } });
+    this.bushMat.color.copy(p.tint).lerp(new THREE.Color(0xffffff), 0.1).multiplyScalar(0.8); const cc = p.skyBot.clone().lerp(new THREE.Color(0xffffff), 0.7); for (const c of this.clouds) c.material.color.copy(cc);
     this.hemi.color.copy(p.skyBot).lerp(new THREE.Color(0xffffff), 0.3); this.hemi.groundColor.copy(p.ground).multiplyScalar(0.8);
     this.sun.color.copy(p.skyBot).lerp(new THREE.Color(0xffd8b0), 0.5); this.sunGlow.material.color.copy(p.skyBot).lerp(new THREE.Color(0xffd8a0), 0.4);
     const g = this.skyCanvas.getContext('2d'), grad = g.createLinearGradient(0, 0, 0, 256);
@@ -274,6 +314,7 @@ export class LineView {
       }
       im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true;
     }
+    this.updateDecor(dt, time, scroll);
     // train
     const sU = sim.speed * U;
     this.wheelAng += (sU * dt) / 0.55; for (const w of this.wheels) w.rotation.x = this.wheelAng;

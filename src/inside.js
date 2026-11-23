@@ -17,6 +17,18 @@ function stitchTexture() {
   const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set((GW + 6) / 2, (GH + 6) / 2); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 
+const WALLC = { sleeper: 0xd8c0e4, dining: 0xf2d0a4, parlor: 0xeab4b4, corridor: 0xf0e2c0, garden: 0xcde8b4, library: 0xc8aa8a, workshop: 0xc4cad4, observatory: 0xb0b8ea, bath: 0xb4e4ea, music: 0xf2dc9c, aquarium: 0xa4d2ee };
+const FRAMEY = new Set(['sleeper', 'dining', 'parlor', 'corridor', 'music']);
+function wallpaperTexture() {
+  const c = document.createElement('canvas'); c.width = 64; c.height = 128; const g = c.getContext('2d');
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, 64, 128);
+  g.fillStyle = 'rgba(120,90,70,0.10)'; for (let x = 0; x < 64; x += 16) g.fillRect(x, 0, 8, 84);
+  g.fillStyle = 'rgba(120,90,70,0.20)'; for (let y = 8; y < 80; y += 24) for (let x = 4; x < 64; x += 16) { g.beginPath(); g.arc(x, y, 2.6, 0, 6.3); g.fill(); }
+  g.fillStyle = 'rgba(90,60,40,0.35)'; g.fillRect(0, 84, 64, 4); g.fillStyle = 'rgba(90,60,40,0.18)'; g.fillRect(0, 88, 64, 40);
+  g.fillStyle = 'rgba(90,60,40,0.22)'; for (let x = 0; x < 64; x += 16) g.fillRect(x, 88, 1.5, 40);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
+}
+
 // ---------- furniture for each room type (local coords: tile (i,j) centre at i+.5, j+.5) ----------
 const BUILDERS = {
   sleeper(g, w, h, R) {
@@ -25,11 +37,13 @@ const BUILDERS = {
       const t = n * 3, i = t % w, j = Math.floor(t / w), x = i + 0.5, z = Math.min(h - 0.75, j + 0.78), hue = new THREE.Color().setHSL(R(), 0.5, 0.5);
       g.add(box(0x7a5030, x, 0.18, z, 0.84, 0.22, 1.3)); g.add(box(0xf2e6d0, x, 0.34, z, 0.74, 0.14, 1.2)); g.add(box(hue, x, 0.43, z + 0.15, 0.76, 0.08, 0.85)); g.add(box(0xffffff, x, 0.46, z - 0.46, 0.5, 0.12, 0.26));
     }
+    g.add(box(0x6a5a9a, w / 2, 0.012, h / 2, Math.max(1, w - 0.9), 0.02, Math.max(1, h - 0.9))); g.add(cyl(0x7a4a2a, 0.22, 0.14, h - 0.24, 0.26, 0.28, 0.26)); g.add(sph(0x4aa05a, 0.22, 0.42, h - 0.24, 0.4, 0.34, 0.4));
     g.add(box(0x6a4a30, w - 0.3, 0.2, 0.3, 0.3, 0.4, 0.3)); const gl = glowSprite(0xffcf80, 1.4, 0.8); gl.position.set(w - 0.3, 0.65, 0.3); g.add(gl); g.add(sph(0xfff0b0, w - 0.3, 0.55, 0.3, 0.15, 0.15, 0.15, { emissive: 0xfff0b0, emissiveIntensity: 1.5 }));
   },
   dining(g, w, h, R) {
     for (let j = 0; j + 1 < h + 1; j += 2) for (let i = 0; i + 1 < w + 1; i += 2) {
       const cx = Math.min(w - 0.5, i + 1), cz = Math.min(h - 0.5, j + 1); if (i + 1 > w || j + 1 > h) continue;
+      g.add(cyl(0xb8503a, cx, 0.012, cz, 1.9, 0.02, 1.9)); g.add(cyl(0xe8c070, cx, 0.016, cz, 1.55, 0.02, 1.55)); g.add(cyl(0xb8503a, cx, 0.02, cz, 1.2, 0.02, 1.2));
       g.add(cyl(0xa86a3a, cx, 0.38, cz, 0.8, 0.07, 0.8)); g.add(cyl(0x5a3a22, cx, 0.2, cz, 0.12, 0.4, 0.12));
       g.add(sph(0xfff0b0, cx, 0.5, cz, 0.08, 0.08, 0.08, { emissive: 0xffe0a0, emissiveIntensity: 1.6 }));
       for (const [dx, dz] of [[-0.55, 0], [0.55, 0], [0, -0.55], [0, 0.55]]) g.add(box(0x7a4a2a, cx + dx, 0.2, cz + dz, 0.28, 0.3, 0.28));
@@ -102,8 +116,12 @@ export class InsideView {
     this.platform = mesh(G.box, toon(0xd9c9a8), GW / 2, -0.17, GH / 2, 1, 0.3, 1); scene.add(this.platform);
     this.pt = { x: 0, z: 0, w: 1, d: 1 }; this.ptTarget = { x: 0, z: 0, w: 1, d: 1 }; this.setPlatformTarget(true);
     this.floors = new THREE.InstancedMesh(G.box, new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: null }), GW * GH); this.floors.frustumCulled = false; this.floors.receiveShadow = LOOK.shadows; this.floors.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(GW * GH * 3), 3); scene.add(this.floors);
-    this.walls = new THREE.InstancedMesh(G.box, toon(0xe9dcc4), 700); this.walls.frustumCulled = false; this.walls.castShadow = this.walls.receiveShadow = LOOK.shadows; scene.add(this.walls);
+    this.walls = new THREE.InstancedMesh(G.box, new THREE.MeshToonMaterial({ color: 0xffffff, map: wallpaperTexture(), gradientMap: toonGradient() }), 700); this.walls.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(700 * 3), 3); this.walls.frustumCulled = false; this.walls.castShadow = this.walls.receiveShadow = LOOK.shadows; scene.add(this.walls);
     this.doors = new THREE.InstancedMesh(G.box, toon(0xd0a248, { emissive: 0x3a2a08 }), 200); this.doors.frustumCulled = false; scene.add(this.doors);
+    this.posts = new THREE.InstancedMesh(G.box, toon(0xa87a3c), 420); this.posts.frustumCulled = false; this.posts.castShadow = LOOK.shadows; scene.add(this.posts);
+    this.lintels = new THREE.InstancedMesh(G.box, toon(0x9a6e34), 200); this.lintels.frustumCulled = false; scene.add(this.lintels);
+    this.frames = new THREE.InstancedMesh(G.box, new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: toonGradient() }), 400); this.frames.frustumCulled = false; this.frames.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(400 * 3), 3); scene.add(this.frames);
+    this.pics = new THREE.InstancedMesh(G.box, new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: toonGradient() }), 400); this.pics.frustumCulled = false; this.pics.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(400 * 3), 3); scene.add(this.pics);
     this.gridLines = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xb8a888, transparent: true, opacity: 0.55 })); scene.add(this.gridLines);
     this.propGroups = new Map(); this.figures = new Map();
     this.ghost = mesh(G.box, new THREE.MeshBasicMaterial({ color: 0x7dffb0, transparent: true, opacity: 0.45, depthWrite: false }), 0, 0.2, 0, 1, 0.3, 1); this.ghost.visible = false; this.ghost.renderOrder = 5; scene.add(this.ghost);
@@ -154,9 +172,21 @@ export class InsideView {
     for (const w of sim.walls) {
       let x = w.x + 0.5, z = w.y + 0.5, sx = 1.08, sz = 0.1;
       if (w.side === 'n') z = w.y; else if (w.side === 's') z = w.y + 1; else { x = w.side === 'w' ? w.x : w.x + 1; sx = 0.1; sz = 1.08; }
-      d.position.set(x, FLOOR_H + WH / 2, z); d.scale.set(sx, WH, sz); d.rotation.set(0, 0, 0); d.updateMatrix(); this.walls.setMatrixAt(i++, d.matrix);
+      d.position.set(x, FLOOR_H + WH / 2, z); d.scale.set(sx, WH, sz); d.rotation.set(0, 0, 0); d.updateMatrix(); this.walls.setMatrixAt(i, d.matrix);
+      const rm = sim.roomAt(w.x, w.y); this.col.setHex(WALLC[rm ? rm.type : 'corridor'] || 0xe9dcc4); const st = STYLES[(rm && rm.style) || 0]; this.col.r = Math.min(1, this.col.r * st[0]); this.col.g = Math.min(1, this.col.g * st[1]); this.col.b = Math.min(1, this.col.b * st[2]); this.walls.setColorAt(i, this.col); i++;
     }
-    this.walls.count = i; this.walls.instanceMatrix.needsUpdate = true;
+    this.walls.count = i; this.walls.instanceMatrix.needsUpdate = true; this.walls.instanceColor.needsUpdate = true;
+    // framed pictures on a few interior walls (first person only), never over a window
+    { let fi = 0; const wins = new Set(sim.windows().map((q) => `${q.x}|${q.z}|${q.side}`));
+      if (this.journey) for (const w of sim.walls) {
+        const rm = sim.roomAt(w.x, w.y); if (!rm || !FRAMEY.has(rm.type) || hash(`fr:${w.x}:${w.y}:${w.side}`) % 100 > 38) continue;
+        const wx = w.side === 'e' ? w.x + 1 : w.side === 'w' ? w.x : w.x + 0.5, wz = w.side === 's' ? w.y + 1 : w.side === 'n' ? w.y : w.y + 0.5; if (wins.has(`${wx}|${wz}|${w.side}`) || fi >= 400) continue;
+        const inx = w.side === 'w' ? 1 : w.side === 'e' ? -1 : 0, inz = w.side === 'n' ? 1 : w.side === 's' ? -1 : 0, rr = rng(hash(`pic:${w.x}:${w.y}:${w.side}`));
+        const fw = 0.3 + rr() * 0.18, fh = 0.24 + rr() * 0.16, py = FLOOR_H + 0.78 + rr() * 0.2;
+        d.position.set(wx + inx * 0.075, py, wz + inz * 0.075); d.scale.set(inx ? 0.035 : fw, fh, inx ? fw : 0.035); d.rotation.set(0, 0, 0); d.updateMatrix(); this.frames.setMatrixAt(fi, d.matrix); this.col.setHex(rr() < 0.5 ? 0xb8864a : 0x7a5230); this.frames.setColorAt(fi, this.col);
+        d.position.set(wx + inx * 0.095, py, wz + inz * 0.095); d.scale.set(inx ? 0.02 : fw - 0.08, fh - 0.08, inx ? fw - 0.08 : 0.02); d.updateMatrix(); this.pics.setMatrixAt(fi, d.matrix); this.col.setHSL(rr(), 0.45, 0.6 + rr() * 0.15); this.pics.setColorAt(fi, this.col); fi++;
+      }
+      this.frames.count = this.pics.count = fi; this.frames.instanceMatrix.needsUpdate = this.pics.instanceMatrix.needsUpdate = true; this.frames.instanceColor.needsUpdate = this.pics.instanceColor.needsUpdate = true; }
     // doors
     i = 0;
     for (const dr of sim.doorList) {
@@ -164,6 +194,13 @@ export class InsideView {
       d.position.set(x, FLOOR_H + 0.02, z); d.scale.set(horiz ? 0.16 : 0.8, 0.03, horiz ? 0.8 : 0.16); d.updateMatrix(); this.doors.setMatrixAt(i++, d.matrix);
     }
     this.doors.count = i; this.doors.instanceMatrix.needsUpdate = true;
+    { let pi = 0, li = 0;
+      for (const dr of sim.doorList) {
+        const horiz = dr.ox !== dr.x, x = horiz ? dr.ox : dr.x + 0.5, z = horiz ? dr.y + 0.5 : dr.oy, ph = WH + 0.06;
+        for (const sgn of [-1, 1]) { d.position.set(horiz ? x : x + sgn * 0.46, FLOOR_H + ph / 2, horiz ? z + sgn * 0.46 : z); d.scale.set(horiz ? 0.13 : 0.12, ph, horiz ? 0.12 : 0.13); d.rotation.set(0, 0, 0); d.updateMatrix(); this.posts.setMatrixAt(pi++, d.matrix); }
+        if (this.journey) { d.position.set(x, FLOOR_H + WH + 0.04, z); d.scale.set(horiz ? 0.14 : 1.08, 0.12, horiz ? 1.08 : 0.14); d.updateMatrix(); this.lintels.setMatrixAt(li++, d.matrix); }
+      }
+      this.posts.count = pi; this.posts.instanceMatrix.needsUpdate = true; this.lintels.count = li; this.lintels.instanceMatrix.needsUpdate = true; }
     // grid lines over the unfolded plot
     const g = s.grid, pts = [];
     for (let x = g.x0; x <= g.x1 + 1; x++) pts.push(x, 0.015, g.y0, x, 0.015, g.y1 + 1);
