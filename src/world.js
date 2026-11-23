@@ -56,15 +56,16 @@ export class World {
     addEventListener('resize', () => { this.resize(); });
     this.setView('line');
   }
-  get cam() { return this.view === 'line' ? this.line.camera : this.inside.camera; }
+  get cam() { return this.view === 'line' ? this.line.camera : this.view === 'journey' ? this.inside.jcam : this.inside.camera; }
   setView(v) {
     this.view = v;
-    const lv = v === 'line';
-    this.line.controls.enabled = lv; this.inside.controls.enabled = !lv;
-    this.pass.scene = lv ? this.line.scene : this.inside.scene; this.pass.camera = lv ? this.line.camera : this.inside.camera;
-    this.bloom.strength = LOOK.bloom[0] * (lv ? 1 : 0.9);
-    if (this.grade) this.grade.uniforms.tilt.value = lv ? 0 : (LOOK.grade.tilt || 0);
-    if (!lv) this.inside.fit(this.aspect);
+    const lv = v === 'line', jv = v === 'journey';
+    this.line.controls.enabled = lv; this.inside.controls.enabled = v === 'inside';
+    this.inside.setJourney(jv);
+    this.pass.scene = lv ? this.line.scene : this.inside.scene; this.pass.camera = lv ? this.line.camera : jv ? this.inside.jcam : this.inside.camera;
+    this.bloom.strength = LOOK.bloom[0] * (v === 'inside' ? 0.9 : 1);
+    if (this.grade) this.grade.uniforms.tilt.value = v === 'inside' ? (LOOK.grade.tilt || 0) : 0;
+    if (v === 'inside') this.inside.fit(this.aspect);
   }
   resize() {
     const w = this.canvas.clientWidth || innerWidth, h = this.canvas.clientHeight || innerHeight; this.aspect = w / h;

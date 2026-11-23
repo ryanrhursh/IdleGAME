@@ -4,6 +4,7 @@ import { Audio } from './audio.js';
 import { ROOMS, LORE, HINTS, HOBBY_ROOM, VOLUMES, NEED_TEXT, PALETTES, TALK, RAPPORT_TEXT, RETURN_LINES } from './data.js';
 import { LOOK, LOOKS, LOOK_ID, saveLook } from './look.js';
 import { scene, portrait, plateSwatch } from './scenes.js';
+import { Journey } from './journey.js';
 document.body.dataset.look = LOOK.ui;
 
 const SAVE_KEY = 'marigold.save.v2';
@@ -14,6 +15,8 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&
 let state = null, fresh = false;
 try { state = loadState(localStorage.getItem(SAVE_KEY)); } catch (e) { state = null; }
 if (!state) { state = newState(); fresh = true; }
+const AFK_MS = 30 * 60 * 1000;
+if (state.mode === 'journey' && Date.now() - (state.lastInput || 0) > AFK_MS) state.mode = 'afk';
 const audio = new Audio(); audio.enabled = state.sound !== false;
 const hooks = {};
 const sim = new Sim(state, hooks);
@@ -44,11 +47,37 @@ function floatText(text, x, y, cls = '') {
 function toast(html) { const el = document.createElement('div'); el.className = 'toast'; el.innerHTML = html; $('toast').appendChild(el); el.addEventListener('animationend', () => el.remove()); }
 function badge(id, on) { const b = $(id); let i = b.querySelector('.badge'); if (!i && on) { i = document.createElement('i'); i.className = 'badge'; b.appendChild(i); } if (i) i.hidden = !on; }
 
+// ---------- journey mode: the conductor on foot ----------
+let speechT = 0, dutiesDirty = true, journey = null;
+const jui = {
+  audio,
+  speech(name, text, tale) { const el = $('speech'); el.innerHTML = `<small>${tale ? 'tells you a tale' : 'says'}</small><b>${esc(name)}</b><p>${esc(text)}</p>`; el.hidden = false; clearTimeout(speechT); speechT = setTimeout(() => { el.hidden = true; }, 4200 + text.length * 40); audio.note(9, 0.3); },
+  note(msg) { toast(esc(msg)); },
+  prompt(n) { const b = $('actBtn'); if (n) { b.textContent = n.label; b.hidden = false; } else b.hidden = true; },
+  console(near) { if (view === 'journey') $('stoke').hidden = !near; },
+};
+journey = new Journey(world, sim, jui);
+window.__game.journey = journey;
+let lastInputWrite = 0;
+function markInput() { const n = Date.now(); if (n - lastInputWrite > 1000) { state.lastInput = n; lastInputWrite = n; } }
+['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart'].forEach((ev) => addEventListener(ev, markInput, { passive: true }));
+markInput();
+function applyControls() { $('stick').hidden = !(view === 'journey' && state.controls === 'stick'); }
+function renderDuties() {
+  const el = $('duties'); if (view !== 'journey') { el.hidden = true; return; }
+  const J = state.jobs.list;
+  el.hidden = false; if (el.dataset.init !== '1') { el.dataset.init = '1'; el.classList.toggle('open', state.jobs.done < 3); el.onclick = () => el.classList.toggle('open'); }
+  el.innerHTML = `<h4>Duties <i>${el.classList.contains('open') ? '\u25be' : '\u25b8'}</i></h4>${J.length ? J.map((j) => `<div class="duty"><b>${esc(j.title)}</b>${j.goal > 1 ? `<span>${j.prog}/${j.goal}</span>` : ''}<small>${esc(j.desc)}</small></div>`).join('') : '<small>No duties just now. Another will be posted soon.</small>'}${sim.carry ? `<div class="carry">Carrying: ${sim.carry.kind === 'tea' ? 'a cup of tea' : 'the post bag'}</div>` : ''}<small class="bonus">Walking your train: +25% Charm</small>`;
+}
+hooks.jobs = () => { dutiesDirty = true; };
+hooks.jobdone = (job) => { toast(`Duty done: <b>${esc(job.title)}</b>. +${fmt(job.reward)} Charm.`); audio.chord(); dutiesDirty = true; if (journey && journey.active) journey.syncProps(true); };
+
 // ---------- hints ----------
 let hintTimer = 0;
 function setHint(n) { if (n <= state.hint && n !== 0) return; state.hint = n; showHint(); }
 function showHint() {
   const el = $('hint'); if (drawing) return;
+  if (view === 'journey') { el.hidden = true; return; }
   if (state.hint >= HINTS.length) { el.hidden = true; return; }
   el.innerHTML = HINTS[state.hint]; el.hidden = false; clearTimeout(hintTimer);
   if (state.hint === 3) hintTimer = setTimeout(() => { if (state.hint === 3) { state.hint = 4; showHint(); } }, 45000);
@@ -63,10 +92,10 @@ modal.addEventListener('click', (e) => { if (e.target === modal && !modal.queryS
 
 // ---------- sim hooks ----------
 hooks.layout = () => { sheetDirty = true; };
-hooks.emote = (e) => { if (view === 'inside') world.inside.emote(e.id, e.kind); };
+hooks.emote = (e) => { if (view === 'inside' || view === 'journey') world.inside.emote(e.id, e.kind); };
 hooks.stop = (st) => {
   toast(`The Marigold slows into <b>${esc(st.name)}</b>.`); audio.whistle(); platformDirty = true;
-  setTimeout(() => { if (state.line.pending && !modalOpen && view === 'line') stopModal(); }, 1600);
+  setTimeout(() => { if (state.line.pending && !modalOpen && (view === 'line' || view === 'journey')) stopModal(); }, 1600);
 };
 hooks.whistle = (name, bonus) => { toast(`Whistle-stop at <b>${esc(name)}</b>. +${bonus} Charm.`); audio.pop(); };
 hooks.postcard = (c) => { toast(`<i>${esc(c.text)}</i>`); badge('bBook', true); };
@@ -106,15 +135,41 @@ $('pageNote').onclick = () => { const a = slipAct; clearTimeout(noteTimer); next
 let view = 'line', platformDirty = true, forkDirty = true, sheetDirty = true, sheetMode = null, drawing = null, selRoom = null;
 function setView(v) {
   if (v === view) return;
+  const prev = view;
   cancelDraw(); selRoom = null; sheetMode = null; world.inside.setSelected(null);
   const fade = $('fade'); fade.style.opacity = 1;
   setTimeout(() => {
     view = v; world.setView(v);
+    if (prev === 'journey') journey.exit();
+    if (v === 'journey') journey.enter();
     $('bLine').setAttribute('aria-pressed', v === 'line'); $('bInside').setAttribute('aria-pressed', v === 'inside');
-    $('stoke').hidden = v !== 'line'; $('inbar').hidden = v !== 'inside'; sheetHide(); platformDirty = forkDirty = true;
-    if (v === 'inside') { setHint(3); showHint(); }
+    $('stoke').hidden = !(v === 'line'); $('inbar').hidden = v !== 'inside'; sheetHide(); platformDirty = forkDirty = true;
+    $('actBtn').hidden = true; $('speech').hidden = true; dutiesDirty = true; applyControls();
+    if (v === 'inside') { setHint(3); showHint(); } else if (v === 'journey') { $('hint').hidden = true; }
     fade.style.opacity = 0;
   }, 200);
+}
+// ---------- the two ways to play: AFK and Journey ----------
+function setGameMode(mode, auto) {
+  if (state.mode === mode && view === (mode === 'journey' ? 'journey' : view)) { if (mode === 'afk' || view === 'journey') return; }
+  state.mode = mode; document.body.dataset.mode = mode;
+  $('modeBtn').textContent = mode === 'journey' ? 'AFK' : 'Journey'; $('modeBtn').setAttribute('aria-pressed', mode === 'journey');
+  if (mode === 'journey') {
+    setView('journey');
+    if (!state.seenJourney) { state.seenJourney = true; queueModal(journeyIntro); }
+  } else {
+    setView('line');
+    if (auto) toast('The conductor has stepped away. The Marigold runs herself.');
+  }
+}
+$('modeBtn').onclick = () => { if (!modalOpen) setGameMode(state.mode === 'journey' ? 'afk' : 'journey'); };
+function journeyIntro() {
+  openModal(`<div class="head">${portrait(7, 76)}<div><div class="eyebrow">Journey mode</div><h2>The conductor on foot</h2></div></div>
+  <p class="dropcap">You can walk the Marigold yourself. Stand among your passengers, hear their tales in person, and see to the small duties that keep a train warm.</p>
+  <p>${state.controls === 'stick' ? 'Use the stick to walk and drag the screen to look.' : 'Tap anywhere on the floor to walk there, and drag to look around.'} On a keyboard, use W A S D and E. Gold lights mark what your duties need.</p>
+  <p>While you are walking your train, it earns a quarter more, and each finished duty pays Charm. Step back to AFK at any time and she will run herself, steady and calm. After half an hour without a touch, she does it for you.</p>
+  <div class="row2"><button class="btn" id="go">Take the cap</button></div>`);
+  $('go').onclick = closeModal;
 }
 $('bLine').onclick = () => { if (!modalOpen) setView('line'); };
 $('bInside').onclick = () => { if (!modalOpen) setView('inside'); };
@@ -124,7 +179,7 @@ let stokeT = 0, needleQ = 0.5;
 $('stokeBtn').addEventListener('pointerdown', (e) => {
   e.preventDefault(); audio.resume();
   const res = sim.stoke(needleQ), r = $('stokeBtn').getBoundingClientRect();
-  audio.coal(res === 'perfect'); if (navigator.vibrate) navigator.vibrate(res === 'perfect' ? 18 : 8);
+  sim.jobEvent('stoke'); audio.coal(res === 'perfect'); if (navigator.vibrate) navigator.vibrate(res === 'perfect' ? 18 : 8);
   floatText(res === 'perfect' ? 'Perfect!' : '+steam', r.left + r.width * needleQ, r.top - 6, res === 'perfect' ? 'perfect' : '');
   if (state.hint === 0) setHint(1);
 });
@@ -263,6 +318,7 @@ function renderBook(flip) {
 function menuModal() {
   openModal(`<div class="eyebrow">Settings</div><h2>The Marigold Line</h2>
   <div class="row2"><button class="btn ghost" id="snd">Sound: ${audio.enabled ? 'on' : 'off'}</button><button class="btn ghost" id="rc">Recentre the view</button></div>
+  <div class="row2"><button class="btn ghost" id="ctl">Walking: ${state.controls === 'stick' ? 'joystick' : 'tap to walk'} (change)</button></div>
   <div class="row2"><button class="btn ghost" id="look">Look: ${esc(LOOK.name)} (change)</button></div>
   <div class="row2"><button class="btn ghost" id="gfx">Graphics: ${({ low: 'Low (faster)', high: 'High', undefined: 'Auto' })[state.gfx]}</button></div>
   <div class="row2"><button class="btn ghost" id="auto">While I'm away, welcome travellers: ${state.auto ? 'yes' : 'no'}</button></div>
@@ -273,6 +329,7 @@ function menuModal() {
   $('snd').onclick = (e) => { audio.enabled = !audio.enabled; state.sound = audio.enabled; audio.apply(); e.target.textContent = 'Sound: ' + (audio.enabled ? 'on' : 'off'); };
   $('rc').onclick = () => { world.line.recentre(world.aspect); world.inside.fit(world.aspect); closeModal(); };
   $('auto').onclick = (e) => { state.auto = !state.auto; e.target.textContent = `While I'm away, welcome travellers: ${state.auto ? 'yes' : 'no'}`; };
+  $('ctl').onclick = (e) => { state.controls = state.controls === 'stick' ? 'tap' : 'stick'; e.target.textContent = `Walking: ${state.controls === 'stick' ? 'joystick' : 'tap to walk'} (change)`; applyControls(); };
   $('look').onclick = () => { const ids = Object.keys(LOOKS), next = ids[(ids.indexOf(LOOK_ID) + 1) % ids.length]; save(); saveLook(next); location.href = location.pathname + location.hash; };
   $('gfx').onclick = (e) => { const order = [undefined, 'low', 'high'], i = (order.indexOf(state.gfx) + 1) % 3; state.gfx = order[i]; world.setGfx(state.gfx || 'auto'); e.target.textContent = 'Graphics: ' + ({ low: 'Low (faster)', high: 'High', undefined: 'Auto' })[state.gfx]; };
   $('tn').onchange = (e) => { state.name = e.target.value.trim().slice(0, 24); };
@@ -383,18 +440,21 @@ function commitDraw() {
 // ---------- pointer input ----------
 const canvas = $('gl'); let ptr = null;
 canvas.addEventListener('pointerdown', (e) => {
-  ptr = { x: e.clientX, y: e.clientY, t: performance.now(), moved: false, id: e.pointerId };
+  ptr = { x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, t: e.timeStamp, moved: false, id: e.pointerId };
+  if (view === 'journey') return;
   if (drawing && view === 'inside') updateDraw(e.clientX, e.clientY);
 });
 canvas.addEventListener('pointermove', (e) => {
   if (!ptr || ptr.id !== e.pointerId) return;
   if (Math.hypot(e.clientX - ptr.x, e.clientY - ptr.y) > 9) ptr.moved = true;
+  if (view === 'journey') { if (ptr.moved) journey.turn(e.clientX - ptr.lx, e.clientY - ptr.ly); ptr.lx = e.clientX; ptr.ly = e.clientY; return; }
   if (drawing && view === 'inside') updateDraw(e.clientX, e.clientY);
 });
 canvas.addEventListener('pointerup', (e) => {
   if (!ptr || ptr.id !== e.pointerId) return; const p = ptr; ptr = null;
+  if (view === 'journey') { if (!p.moved && e.timeStamp - p.t < 450) journey.tap(e.clientX, e.clientY); return; }
   if (drawing && view === 'inside') { commitDraw(); return; }
-  if (!p.moved && performance.now() - p.t < 450) tap(e.clientX, e.clientY);
+  if (!p.moved && e.timeStamp - p.t < 450) tap(e.clientX, e.clientY);
 });
 canvas.addEventListener('pointercancel', () => { ptr = null; if (drawing) { world.inside.setGhost(null); drawing.a = null; drawing.rect = null; $('drawcost').hidden = true; } });
 function tap(x, y) {
@@ -428,9 +488,10 @@ function updateHud(dt, time) {
     if (sheetDirty) { renderSheet(); sheetDirty = false; }
     else if (sheetMode === 'build' || sheetMode === 'unfold' || sheetMode === 'room') renderSheetCosts();
     if (view === 'line' && !L.forkChosen && L.forkAnnounced) renderFork();
+    if (view === 'journey' && (dutiesDirty || true)) { renderDuties(); dutiesDirty = false; }
   }
   // room labels
-  const show = view === 'inside' && !modalOpen;
+  const show = view === 'inside' && !modalOpen, showTags = (view === 'inside' || view === 'journey') && !modalOpen;
   for (const r of state.rooms) {
     let el = roomLabels.get(r.id);
     if (!el) { el = document.createElement('div'); el.className = 'rname'; el.textContent = ROOMS[r.type].name; labels.appendChild(el); roomLabels.set(r.id, el); }
@@ -443,8 +504,8 @@ function updateHud(dt, time) {
     let el = tagLabels.get(p.id);
     if (!el) { el = document.createElement('div'); el.className = 'ptag'; labels.appendChild(el); tagLabels.set(p.id, el); }
     el.textContent = p.name.split(' ')[0];
-    if (!show) { el.style.display = 'none'; continue; }
-    const q = world.project(p.x, 1.35, p.y); el.style.display = q.ok ? '' : 'none'; el.style.left = q.x + 'px'; el.style.top = q.y + 'px';
+    if (!showTags || (view === 'journey' && Math.hypot(p.x - journey.x, p.y - journey.z) > 5)) { el.style.display = 'none'; continue; }
+    const q = world.project(p.x, view === 'journey' ? 0.95 : 1.35, p.y); el.style.display = q.ok ? '' : 'none'; el.style.left = q.x + 'px'; el.style.top = q.y + 'px';
   }
   for (const [id, el] of tagLabels) if (!state.passengers.some((p) => p.id === id)) { el.remove(); tagLabels.delete(id); }
   // soft train sound
@@ -461,6 +522,8 @@ else {
   state.hint = Math.max(state.hint, 1);
 }
 sim.checkProgress(); showHint();
+document.body.dataset.mode = state.mode; $('modeBtn').textContent = state.mode === 'journey' ? 'AFK' : 'Journey';
+if (state.mode === 'journey') setTimeout(() => setGameMode('journey'), 50);
 world.line.recentre(world.aspect);
 let last = performance.now();
 function loop(t) {
@@ -468,6 +531,7 @@ function loop(t) {
   let dt = (t - last) / 1000; last = t;
   if (dt > 2.5) { const rep = sim.offline(dt); if (dt > 60 && (rep.miles > 0.3 || rep.charm > 2)) queueModal(() => awayModal(rep)); dt = 0.016; }
   dt = Math.min(dt, 0.1);
-  sim.tick(dt); world.frame(dt, t / 1000); updateHud(dt, t / 1000);
+  if (state.mode === 'journey' && Date.now() - (state.lastInput || 0) > AFK_MS) setGameMode('afk', true);
+  sim.tick(dt); if (view === 'journey') journey.update(dt, t / 1000); world.frame(dt, t / 1000); updateHud(dt, t / 1000);
 }
 requestAnimationFrame(loop);

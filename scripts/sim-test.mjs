@@ -98,6 +98,36 @@ const prog = sim.loreProgress({ need: { miles: 10000 } }); ok(prog >= 0 && prog 
   const before = s3.charm; ok(sim3.invite() === null && s3.returns === 1 && s3.charm > before, 'they come aboard again, with a gift of Charm');
   ok(s3.passengers[0].since && s3.passengers[0].mood >= 55 && s3.passengers[0].tales >= 1, 'they remember you, and say what has changed');
 }
+// journey mode: walking the train and doing duties
+{
+  const s4 = newState(); const sim4 = new Sim(s4, {}); s4.charm = 1e4;
+  s4.line.pending = { idx: 0, name: 'T', mile: 0 }; sim4.invite({ mood: 6 });
+  const sp = sim4.spawn(); ok(sim4.canStand(sp.x, sp.z), 'the conductor spawns on the floor');
+  ok(!sim4.canStand(0.5, 0.5), 'nobody stands outside the rooms');
+  { let x = 9.5, z = 7.5; for (let i = 0; i < 60; i++) [x, z] = sim4.tryMove(x, z, 0, -0.1); ok(z >= 7.0, `walls stop you walking through them (stopped at z=${z.toFixed(2)})`); }
+  // walk through a door from the sleeper into the dining car without leaving the floor
+  const door = sim4.doorList.find((d) => sim4.roomAt(d.x, d.y).type === 'sleeper' && sim4.roomAt(d.ox, d.oy).type === 'dining');
+  ok(door ? sim4.canStand(door.x + 0.5, door.y + 0.5) && sim4.canStand(door.ox + 0.5, door.oy + 0.5) : true, 'doorways are walkable');
+  s4.jobs.nextAt = 0; for (let i = 0; i < 6; i++) { s4.jobs.nextAt = 0; sim4.ensureJobs(); }
+  ok(s4.jobs.list.length === 3 && new Set(s4.jobs.list.map((j) => j.kind)).size === 3, 'three different duties are posted: ' + s4.jobs.list.map((j) => j.kind).join(', '));
+  // do each one
+  const before = s4.charm;
+  const stoke = () => { s4.jobs.list = []; s4.jobs.list.push(sim4.newJob('stoke')); s4.pressure = 100; sim4.jobEvent('stoke'); };
+  stoke(); ok(s4.jobs.done === 1 && s4.charm > before, 'raising steam completes the duty and pays Charm');
+  const pid = s4.passengers[0].id;
+  s4.jobs.list = [sim4.newJob('tea')]; ok(sim4.jobEvent('serve', { pid }) === null, 'you cannot serve tea you do not hold');
+  ok(sim4.jobEvent('pour') !== null && sim4.carry && sim4.carry.kind === 'tea', 'the urn fills a cup');
+  sim4.jobEvent('serve', { pid }); ok(s4.jobs.done === 2, 'serving the tea finishes the duty');
+  s4.jobs.list = [sim4.newJob('post')]; sim4.jobEvent('bag'); ok(sim4.carry && sim4.carry.kind === 'post', 'you can take the post bag');
+  sim4.jobEvent('deliver', { pid }); ok(s4.jobs.done === 3, 'delivering it finishes the duty');
+  s4.jobs.list = [sim4.newJob('tidy')]; for (let i = 0; i < 3; i++) sim4.jobEvent('tidy', { i }); ok(s4.jobs.done === 4, 'tidying three things finishes the duty');
+  s4.jobs.list = [sim4.newJob('checkin')]; const talk = sim4.chatWith(pid); sim4.jobEvent('talk', { pid }); ok(talk && talk.text.length > 10, 'talking gives something to say: ' + talk.text.slice(0, 40));
+  s4.passengers[0].tales = 2; s4.passengers[0].told = 0; const t1 = sim4.chatWith(pid); ok(t1.tale === true, 'unheard tales are told first');
+  { const rt = sim4.rt.get(pid), pa = s4.passengers[0]; rt.state = 'use'; rt.use = 1e9; rt.room = 2; rt.len = 4;
+    sim4.setJourney(true); let c0 = s4.charm; for (let i = 0; i < 100; i++) sim4.updateP(pa, 0.1); const gainJ = s4.charm - c0;
+    sim4.setJourney(false); c0 = s4.charm; for (let i = 0; i < 100; i++) sim4.updateP(pa, 0.1); const gainA = s4.charm - c0;
+    ok(gainJ > gainA * 1.15 && gainJ < gainA * 1.4, `Journey mode earns about a quarter more (${(gainJ / gainA).toFixed(2)}x)`); }
+}
 // save round trip
 const back = loadState(JSON.stringify(s)); ok(back && back.rooms.length === s.rooms.length, 'save round-trips');
 console.log(fails ? `${fails} FAILED` : 'all passed'); process.exit(fails ? 1 : 0);

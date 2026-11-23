@@ -1,5 +1,14 @@
 # Hand-off notes
 
+## Latest: AFK mode and Journey mode
+- A button in the top bar switches between **AFK** (the game as it was: the train runs itself, steady and calm) and **Journey** (you walk the train in first person as the conductor). Same save either way.
+- **Journey:** raised walls and a ceiling, tap-to-walk or a joystick (Settings > Walking switches), drag to look, WASD plus E on a keyboard. Talk to passengers in person (you hear their tales aloud first, then ordinary chat), stoke at the conductor's post.
+- **Duties (Journey only):** up to three at a time: serve tea from a dining-car urn, say hello to passengers, deliver the post bag, tidy a room, raise steam. Gold lights mark what a duty needs. Each pays about 0.8 minutes of your income in Charm and feeds three new chapters (The Conductor's Log, Small Duties, What the Cap Remembers).
+- **Reward for playing Journey:** +25% Charm while you are walking the train, plus duty pay. AFK is untouched.
+- **Auto-AFK:** after 30 minutes with no touch, key or mouse input you drop back to AFK. It works whether the game stayed open or was closed: the last-input time is saved, and checked when you return.
+Please check: is walking comfortable on your phone (tap and joystick)? Are duties fun for a few minutes or a chore? Is +25% and the duty pay enough to make Journey feel worth it without making AFK feel like a loss? Does first person look good enough, or too rough up close?
+Known gaps: no window to look out at the Line from first person, passengers do not block you, the cab/post is a prop at the start of the corridor, and the post bag/tea are just carried (no hands visible).
+
 ## Latest: meeting people, and what happens after they leave
 - **Talk first (optional):** at a stop, the quick *Invite aboard* still works. *Talk first* opens a short scene: you read a small tell (a glance at the kettle, reading every sign, standing apart) and choose to offer tea, ask about their journey, or give quiet. Reading them well starts them warmer (their first tale opens at once); everyone is welcomed either way.
 - **Farewells:** leaving is a card with a gesture that fits who they were, their keepsake, and a promise they may write or return.

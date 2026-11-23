@@ -1,5 +1,5 @@
 // Game rules and simulation for the Marigold Line. No rendering code lives here.
-import { ROOMS, HOBBY_ROOM, PASSENGERS, GEN_FIRST, GEN_LAST, GEN_TYPES, REGION_ADJ, REGION_NOUN, STOP_A, STOP_B, PALETTES, WEATHER, HINT_WORDS, LANDMARKS, POSTCARD_OPEN, LORE, PLATE_LINES, TELLS, REPLIES, LETTERS, RETURN_LINES, FAREWELLS } from './data.js';
+import { ROOMS, HOBBY_ROOM, PASSENGERS, GEN_FIRST, GEN_LAST, GEN_TYPES, REGION_ADJ, REGION_NOUN, STOP_A, STOP_B, PALETTES, WEATHER, HINT_WORDS, LANDMARKS, POSTCARD_OPEN, LORE, PLATE_LINES, TELLS, REPLIES, LETTERS, RETURN_LINES, FAREWELLS, CHAT_LINES, JOB_FLAVOR } from './data.js';
 
 export const GW = 24, GH = 16;
 export const BASE_SPEED = 0.12; // miles per second at idle pressure
@@ -73,7 +73,7 @@ export function newState(now = Date.now()) {
     grid: { x0: 6, y0: 4, x1: 15, y1: 9 },
     rooms: [{ id: 1, type: 'sleeper', x: 6, y: 4, w: 3, h: 3 }, { id: 2, type: 'dining', x: 9, y: 4, w: 4, h: 3 }, { id: 3, type: 'corridor', x: 6, y: 7, w: 10, h: 1 }],
     nextRoom: 4, unlocked: ['sleeper', 'dining', 'parlor', 'corridor'],
-    passengers: [], nextPid: 1, keepsakes: [], postcards: [], tickets: [], plates: [], talesHeard: 0, departed: [], mail: [], returns: 0, lettersGot: 0, journal: [],
+    passengers: [], nextPid: 1, keepsakes: [], postcards: [], tickets: [], plates: [], talesHeard: 0, departed: [], mail: [], returns: 0, lettersGot: 0, mode: 'afk', controls: 'tap', jobs: { list: [], done: 0, nextAt: 0, id: 1 }, lastInput: now, journal: [],
     line: { seed: Math.floor(Math.random() * 1e9), region: 'M', regionStart: 0, nextStop: 2.5, stopIndex: 0, nextLandmark: 7, forkChosen: null, forkAnnounced: false, pending: null },
     hint: 0, auto: false, sound: true, name: '', paintSeen: false,
   };
@@ -96,7 +96,7 @@ const edgeKey = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 export class Sim {
   constructor(state, hooks = {}) {
     this.s = state; this.h = hooks; this.rt = new Map(); this.quiet = null; this.t = { lore: 0 };
-    this.speed = 0; this.version = 0;
+    this.speed = 0; this.version = 0; this.journey = false; this.carry = null;
     this.index();
   }
   ev(name, a, b) {
@@ -240,6 +240,102 @@ export class Sim {
     return null;
   }
 
+  // ---------- journey mode: walking the train as the conductor ----------
+  canStand(x, z, r = 0.17) {
+    const cx = Math.floor(x), cz = Math.floor(z), ck = key(cx, cz);
+    if (!this.tile.has(ck)) return false;
+    const rid = this.tile.get(ck), nb = this.neighbors(ck);
+    for (const [dx, dz] of [[-r, -r], [r, -r], [-r, r], [r, r]]) {
+      const sk = key(Math.floor(x + dx), Math.floor(z + dz));
+      if (sk === ck) continue;
+      if (!this.tile.has(sk)) return false;
+      if (this.tile.get(sk) === rid) continue;
+      if (!nb.includes(sk)) return false;
+    }
+    return true;
+  }
+  tryMove(x, z, dx, dz) {
+    let nx = x + dx; if (!this.canStand(nx, z)) nx = x;
+    let nz = z + dz; if (!this.canStand(nx, nz)) nz = z;
+    return [nx, nz];
+  }
+  post() { const r = this.s.rooms.find((q) => q.type === 'corridor') || this.s.rooms[0]; return { x: r.x + 0.5, z: r.y + 0.5, vertical: r.h > r.w }; }
+  spawn() { const p = this.post(); return p.vertical ? { x: p.x, z: p.z + 1 } : { x: p.x + 1, z: p.z }; }
+  urns() { return this.s.rooms.filter((r) => r.type === 'dining').map((r) => ({ rid: r.id, x: r.x + 0.4, z: r.y + 0.4 })); }
+  setJourney(on) { this.journey = !!on; if (!on) this.carry = null; }
+
+  // ---------- duties: small jobs only the conductor can do in person ----------
+  jobKinds() {
+    const s = this.s, ks = ['stoke'];
+    if (s.passengers.length) { ks.push('checkin', 'post'); if (s.rooms.some((r) => r.type === 'dining')) ks.push('tea'); }
+    if (s.rooms.some((r) => r.type !== 'corridor' && r.type !== 'sleeper')) ks.push('tidy');
+    return ks;
+  }
+  newJob(kind) {
+    const s = this.s, J = s.jobs, pick = (a) => a[Math.floor(Math.random() * a.length)], ps = s.passengers;
+    const job = { id: J.id++, kind, prog: 0, goal: 1, data: {}, flavor: pick(JOB_FLAVOR[kind]) };
+    if (kind === 'tea') { job.goal = Math.min(3, Math.max(1, ps.length)); job.title = 'Tea service'; job.desc = `Pour tea at the urn in a dining car, and serve ${job.goal} ${job.goal === 1 ? 'passenger' : 'passengers'}.`; job.data = { served: [] }; }
+    else if (kind === 'checkin') { job.goal = Math.min(3, ps.length); job.title = 'Say hello'; job.desc = `Stop and talk with ${job.goal} ${job.goal === 1 ? 'passenger' : 'different passengers'}.`; job.data = { met: [] }; }
+    else if (kind === 'post') { const t = pick(ps); job.title = 'The post bag'; job.desc = `Take the post bag from the conductor's post to ${t.name}.`; job.data = { to: t.id, name: t.name }; }
+    else if (kind === 'tidy') {
+      const rooms = s.rooms.filter((r) => r.type !== 'corridor' && r.type !== 'sleeper'), r = pick(rooms), spots = [];
+      for (let k = 0; k < 3; k++) spots.push({ x: r.x + 0.3 + Math.random() * (r.w - 0.6), z: r.y + 0.3 + Math.random() * (r.h - 0.6), done: false });
+      job.goal = 3; job.title = 'Tidy up'; job.desc = `Pick up the things left about in the ${ROOMS[r.type].name}.`; job.data = { rid: r.id, spots };
+    } else { const target = [55, 70, 85][Math.min(2, Math.floor(J.done / 4))]; job.title = 'Raise steam'; job.desc = `Bring the boiler up to ${target} pressure at the conductor's post.`; job.data = { target }; job.goal = 1; }
+    job.reward = Math.max(30, Math.round(this.charmRate() * 60 * 0.8));
+    return job;
+  }
+  jobValid(job) {
+    const s = this.s;
+    if (job.kind === 'post') return s.passengers.some((p) => p.id === job.data.to);
+    if (job.kind === 'tea' || job.kind === 'checkin') return s.passengers.length > 0 && (job.kind === 'checkin' || s.rooms.some((r) => r.type === 'dining'));
+    if (job.kind === 'tidy') return this.roomById.has(job.data.rid);
+    return true;
+  }
+  ensureJobs() {
+    const J = this.s.jobs, before = J.list.length;
+    J.list = J.list.filter((j) => this.jobValid(j));
+    if (J.list.length !== before) this.carry = null;
+    if (J.list.length < 3 && Date.now() >= J.nextAt) {
+      const have = new Set(J.list.map((j) => j.kind)), ks = this.jobKinds().filter((k) => !have.has(k));
+      if (ks.length) { J.list.push(this.newJob(ks[Math.floor(Math.random() * ks.length)])); this.ev('jobs'); }
+    }
+  }
+  completeJob(job) {
+    const J = this.s.jobs; J.list = J.list.filter((j) => j !== job); J.done++; J.nextAt = Date.now() + 10000; this.carry = null;
+    this.s.charm += job.reward; this.ev('jobdone', job); this.checkProgress();
+  }
+  // In-person actions. Returns a short message for the screen, or null if nothing happened.
+  jobEvent(type, data = {}) {
+    const J = this.s.jobs, find = (k) => J.list.find((j) => j.kind === k);
+    if (type === 'pour') { if (find('tea') && !this.carry) { this.carry = { kind: 'tea' }; return 'You fill a cup from the urn.'; } return this.carry ? 'Your hands are full.' : 'Nobody has asked for tea.'; }
+    if (type === 'serve') {
+      const job = find('tea'); if (!job || !this.carry || this.carry.kind !== 'tea' || job.data.served.includes(data.pid)) return null;
+      job.data.served.push(data.pid); job.prog++; this.carry = null; const p = this.s.passengers.find((q) => q.id === data.pid); if (p) this.addMood(p, 4);
+      if (job.prog >= job.goal) this.completeJob(job); else this.ev('jobs'); return 'Served. Back to the urn for another.';
+    }
+    if (type === 'talk') {
+      const job = find('checkin'); if (!job || job.data.met.includes(data.pid)) return null;
+      job.data.met.push(data.pid); job.prog++; if (job.prog >= job.goal) this.completeJob(job); else this.ev('jobs'); return null;
+    }
+    if (type === 'tidy') {
+      const job = find('tidy'); if (!job) return null; const sp = job.data.spots[data.i]; if (!sp || sp.done) return null;
+      sp.done = true; job.prog++; if (job.prog >= job.goal) this.completeJob(job); else this.ev('jobs'); return 'Tidied.';
+    }
+    if (type === 'stoke') { const job = find('stoke'); if (job && this.s.pressure >= job.data.target) { this.completeJob(job); } return null; }
+    if (type === 'bag') { const job = find('post'); if (job && !this.carry) { this.carry = { kind: 'post', to: job.data.to }; return `You take the post bag. It is addressed to ${job.data.name}.`; } return this.carry ? 'Your hands are full.' : 'There is no post today.'; }
+    if (type === 'deliver') { const job = find('post'); if (job && this.carry && this.carry.kind === 'post' && this.carry.to === data.pid) { job.prog = 1; const p = this.s.passengers.find((q) => q.id === data.pid); if (p) this.addMood(p, 6); this.completeJob(job); return 'Delivered.'; } return null; }
+    return null;
+  }
+  // Talking in person: unheard tales come first, then ordinary chat.
+  chatWith(pid) {
+    const p = this.s.passengers.find((q) => q.id === pid); if (!p) return null;
+    const d = defOf(p), first = p.name.split(' ')[0];
+    p.told = p.told || 0; this.addMood(p, 2); this.s.charm += 2 * this.charmMul;
+    if (p.told < p.tales) { const t = d.tales[p.told++]; return { text: t, tale: true }; }
+    const r = rng(hash(`chat:${p.id}:${p.told}:${Math.floor(Date.now() / 60000)}`)); return { text: CHAT_LINES[Math.floor(r() * CHAT_LINES.length)].replace(/\{name\}/g, first), tale: false };
+  }
+
   // ---------- passengers ----------
   freeBeds() { return this.beds - this.s.passengers.length; }
   candidate() { return passengerAt(this.s.metCount, this.s.line.seed); }
@@ -309,7 +405,7 @@ export class Sim {
       const room = this.roomById.get(rt.room), d = defOf(p), fav = room && room.type === HOBBY_ROOM[d.hobby];
       const L = rt.len || 0, walkPenalty = L <= 6 ? 1.25 : L <= 12 ? 1 : L <= 18 ? 0.85 : 0.7;
       if (!rt.emoted) { rt.emoted = true; if (fav) this.ev('emote', { id: p.id, kind: 'heart' }); }
-      this.s.charm += 0.45 * this.moodF(p) * (fav ? 2 : 1) * (1 + 0.2 * ((room && room.lv) || 0)) * this.charmMul * (this.s.line.pending ? 0.5 : 1) * walkPenalty * dt;
+      this.s.charm += 0.45 * (this.journey ? 1.25 : 1) * this.moodF(p) * (fav ? 2 : 1) * (1 + 0.2 * ((room && room.lv) || 0)) * this.charmMul * (this.s.line.pending ? 0.5 : 1) * walkPenalty * dt;
       this.addMood(p, (fav ? 0.5 : 0.15) * dt);
       if (rt.use <= 0) { rt.state = 'idle'; rt.t = 1 + Math.random() * 2.5; rt.room = rt.room; }
     }
@@ -414,6 +510,7 @@ export class Sim {
     this.speed += (target - this.speed) * Math.min(1, dt * (L.pending ? 1.2 : 0.8));
     if (!L.pending) this.advance(this.speed * dt);
     for (const p of s.passengers) this.updateP(p, dt);
+    this.t.jobs = (this.t.jobs || 0) + dt; if (this.t.jobs > 2) { this.t.jobs = 0; this.ensureJobs(); }
     this.t.lore += dt; if (this.t.lore > 2) { this.t.lore = 0; this.checkProgress(); }
   }
   addPlate(reg) {
@@ -424,7 +521,7 @@ export class Sim {
   }
   loreCtx() {
     const s = this.s;
-    return { miles: s.miles, aboard: s.passengers.length, met: s.metCount, unfolds: s.unfolds, rooms: s.rooms.length, keepsakes: s.keepsakes.length, postcards: s.postcards.length, tickets: s.tickets.length, tales: s.talesHeard || 0, returns: s.returns || 0, letters: s.lettersGot || 0, levels: s.rooms.reduce((a, r) => a + (r.lv || 0), 0) };
+    return { miles: s.miles, aboard: s.passengers.length, met: s.metCount, unfolds: s.unfolds, rooms: s.rooms.length, keepsakes: s.keepsakes.length, postcards: s.postcards.length, tickets: s.tickets.length, tales: s.talesHeard || 0, returns: s.returns || 0, letters: s.lettersGot || 0, jobs: (s.jobs && s.jobs.done) || 0, levels: s.rooms.reduce((a, r) => a + (r.lv || 0), 0) };
   }
   loreProgress(e) {
     const ks = Object.keys(e.need); if (!ks.length) return 1;

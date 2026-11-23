@@ -132,6 +132,9 @@ export const LORE = [
   { id: 'keep', vol: 1, scene: 'keep', title: 'What Is Left Behind', need: { keepsakes: 1 }, text: 'When someone steps off at their stop, they leave a small thing: a button, a tune, a way of folding napkins. The train keeps every one. She does not call it clutter. She calls it company.' },
   { id: 'mail', vol: 1, scene: 'letters', title: 'The Post Car', need: { letters: 1 }, text: 'Nobody can say how it reaches the Marigold, since she has no address, but a letter arrived from someone who had stepped off at a station long ago. It began, "Dear conductor, I hope the train is well." It ended, "I am."' },
   { id: 'return', vol: 1, scene: 'guest', title: 'A Familiar Face', need: { returns: 1 }, text: 'The platform was crowded, but you knew the one in the middle at once, because they were waving with the whole of their arm. They had changed, a little, the way people do when something has gone well. The Marigold slowed, and did not mind being late.' },
+  { id: 'log1', vol: 0, scene: 'cap', title: 'The Conductor\'s Log', need: { jobs: 1 }, text: 'In the cab you found a log, and in the log, a first line already written in a hand you almost knew: "Do one small thing well, and the train notices." You did one small thing. The page below it, a little embarrassed, wrote itself.' },
+  { id: 'log2', vol: 1, scene: 'dinner', title: 'Small Duties', need: { jobs: 8 }, text: 'Pouring tea, carrying the post bag, picking up a dropped glove. None of it is grand. The Marigold has always run on this kind of thing: a great many small kindnesses, done on foot, by someone who stayed.' },
+  { id: 'log3', vol: 2, scene: 'seat', title: 'What the Cap Remembers', need: { jobs: 25 }, text: 'On the twenty-fifth page of the log there is a drawing of the Marigold, and beside it, in the margin: "Thank you for walking her." The cap on the hook is warm. It is, you notice, very slightly too small, as though it has been waiting for someone younger. Or someone who has just begun.' },
   { id: 'dinner', vol: 1, scene: 'dinner', title: 'Stories at Dinner', need: { tales: 3 }, text: 'Somewhere between the soup and the second pot of tea, people began to tell the truth. Nobody planned it. The Marigold only dimmed the lamps a little and kept the kettle warm.' },
   { id: 'glow', vol: 1, scene: 'glow', title: 'The Well-Loved Rooms', need: { levels: 4 }, text: 'A room loved enough begins to glow at the edges. It is not a spell. Rooms simply do this, when enough people have been happy in them, and have said so.' },
   { id: 'table', vol: 1, scene: 'dinner', title: 'The Long Table', need: { aboard: 6 }, text: 'Six chairs, then eight, then more than the table was long. Nobody ever stood. The Marigold, who has never turned anyone away, rearranged her walls so that no one would have to.' },
@@ -217,4 +220,23 @@ export const RETURN_LINES = {
   music: 'They have finished the song. They are back to sing it to the one who first asked for it.',
   aquarium: 'They have a new fish, and a very good story about it.',
   chat: 'They are back with news from six towns and a gift for each of you.',
+};
+
+// things passengers say when you stop to talk and they have no new tale to tell
+export const CHAT_LINES = [
+  '{name} tells you about the weather in a place you have never been, and makes it sound like a friend.',
+  '{name} asks if you have ever noticed how the lamps lean toward whoever is sad. You have.',
+  '{name} shows you a button they found in their pocket and cannot account for. "A souvenir," they decide.',
+  '{name} says the train sounds different tonight. Happier. Or perhaps that is the tea.',
+  '{name} hums a few bars of something and apologises. You ask for the rest.',
+  '{name} says the best part of any journey is the part nobody planned.',
+  '{name} wonders aloud how far a train can go if it never once looks back. Then smiles. "Further than I thought."',
+  '{name} offers you half a biscuit and an opinion about the dining car. You accept both.',
+];
+export const JOB_FLAVOR = {
+  tea: ['A pot of tea has gone cold in the dining car, and three people are too polite to say so.'],
+  checkin: ['A train is only as warm as the people on it. Go and see how they are.'],
+  post: ['A bag of post has been waiting by the conductor\'s post for a day. Someone is expecting it.'],
+  tidy: ['A room has been well loved, which is to say, a little untidy.'],
+  stoke: ['The boiler is feeling shy. A bit of coal and a bit of company will bring her round.'],
 };
