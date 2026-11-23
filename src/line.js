@@ -4,6 +4,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { PALETTES } from './data.js';
 import { regionOf, stopName, hash, rng, clamp, KINDS, landmarkFor, autoSide } from './logic.js';
+import { LOOK } from './look.js';
 import { toon, basic, glowSprite, glowTexture, mesh, G, box, cyl, sph, cone, makeFigure, signTexture, lerp } from './gfx.js';
 
 export const U = 60; // world units per mile
@@ -64,13 +65,14 @@ export class LineView {
   constructor(world) {
     this.world = world; this.sim = world.sim;
     const scene = this.scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x6a3f6a, 0.0052);
+    scene.fog = new THREE.FogExp2(0x6a3f6a, 0.0052 * LOOK.fogMul);
     this.camera = new THREE.PerspectiveCamera(46, 1, 0.5, 900);
     this.camTarget = new THREE.Vector3(0, 1.6, 1);
     this.camera.position.set(-10, 4.6, -15);
     // lights
     this.hemi = new THREE.HemisphereLight(0xaab0ff, 0x3a2a30, 1.7); scene.add(this.hemi);
-    this.sun = new THREE.DirectionalLight(0xffc89a, 2.0); this.sun.position.set(-20, 30, 40); scene.add(this.sun);
+    this.sun = new THREE.DirectionalLight(0xffc89a, 2.0 * LOOK.sunMul); this.sun.position.set(-20, 30, 40); scene.add(this.sun); this.hemi.intensity *= LOOK.lightMul;
+    if (LOOK.shadows) { const s = this.sun; s.castShadow = true; s.shadow.mapSize.set(1536, 1536); s.shadow.camera.left = -34; s.shadow.camera.right = 34; s.shadow.camera.top = 34; s.shadow.camera.bottom = -34; s.shadow.camera.near = 5; s.shadow.camera.far = 120; s.shadow.bias = -0.0006; s.shadow.normalBias = 0.05; s.position.set(-14, 28, -10); s.target.position.set(0, 0, 2); scene.add(s.target); }
     this.trainLight = new THREE.PointLight(0xffc27a, 14, 20, 1.8); this.trainLight.position.set(0, 2.6, 0); scene.add(this.trainLight);
     // sky
     this.skyCanvas = document.createElement('canvas'); this.skyCanvas.width = 4; this.skyCanvas.height = 256;
@@ -85,7 +87,7 @@ export class LineView {
     gg.fillStyle = '#d8d8d8'; gg.fillRect(0, 0, 128, 128);
     for (let i = 0; i < 260; i++) { const v = 150 + Math.floor(rr() * 105); gg.fillStyle = `rgba(${v},${v},${v},${0.18 + rr() * 0.25})`; gg.beginPath(); gg.ellipse(rr() * 128, rr() * 128, 2 + rr() * 8, 1 + rr() * 4, rr() * 3, 0, 7); gg.fill(); }
     this.groundTex = new THREE.CanvasTexture(gc); this.groundTex.wrapS = this.groundTex.wrapT = THREE.RepeatWrapping; this.groundTex.repeat.set(24, 56); this.groundTex.colorSpace = THREE.SRGBColorSpace;
-    this.ground = mesh(new THREE.PlaneGeometry(420, 700), new THREE.MeshToonMaterial({ color: 0x3f4a3a, map: this.groundTex, gradientMap: null }), 0, 0, 200); this.ground.rotation.x = -Math.PI / 2; scene.add(this.ground);
+    this.ground = mesh(new THREE.PlaneGeometry(420, 700), new THREE.MeshToonMaterial({ color: 0x3f4a3a, map: this.groundTex, gradientMap: null }), 0, 0, 200); this.ground.rotation.x = -Math.PI / 2; scene.add(this.ground); this.ground.receiveShadow = LOOK.shadows; this.ground.castShadow = false;
     // distant ridges
     this.ridges = [];
     for (const [z, h, seed] of [[430, 70, 1], [370, 45, 2]]) {
@@ -103,7 +105,7 @@ export class LineView {
     for (let k = 0; k < KINDS; k++) {
       const geo = propGeo(k);
       const mat = k === 4 ? new THREE.MeshBasicMaterial({ vertexColors: true }) : k === 5 ? new THREE.MeshBasicMaterial({ vertexColors: true, color: 0xffffff }) : new THREE.MeshToonMaterial({ vertexColors: true, color: 0xffffff, gradientMap: null });
-      const im = new THREE.InstancedMesh(geo, mat, COUNTS[k]); im.frustumCulled = false; im.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(COUNTS[k] * 3), 3); scene.add(im);
+      const im = new THREE.InstancedMesh(geo, mat, COUNTS[k]); im.frustumCulled = false; im.castShadow = LOOK.shadows && k !== 3 && k !== 4; im.receiveShadow = false; im.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(COUNTS[k] * 3), 3); scene.add(im);
       const slots = []; const R2 = rng(100 + k);
       for (let i = 0; i < COUNTS[k]; i++) slots.push({ z0: R2() * RANGE, lap: -999, x: 0, s: 1, rot: 0, act: false, b: 0.8 });
       this.props.push({ im, slots, mat }); tintMats.push(mat);

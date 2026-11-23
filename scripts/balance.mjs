@@ -52,3 +52,10 @@ while (t < minutes * 60) {
 console.log(`bot: ${minutes} min, stoke every ${stokeEvery || 'never'}s`);
 console.log(log.join('\n'));
 console.log(`stops handled ${stopsSeen}, declined for no berth ${declined}, rooms built ${built}`);
+
+if (process.argv[4]) {
+  const fs = await import('node:fs');
+  s.last = Date.now(); s.hint = 4; s.line.pending = null;
+  fs.writeFileSync(process.argv[4], JSON.stringify(s));
+  console.log('saved', process.argv[4], `${s.rooms.length} rooms, ${s.passengers.length} passengers`);
+}

@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { ROOMS } from './data.js';
 import { GW, GH, rng, hash, clamp } from './logic.js';
+import { LOOK } from './look.js';
 import { toon, basic, glowSprite, mesh, G, box, cyl, sph, cone, makeFigure, gearGeometry } from './gfx.js';
 
 const FLOOR_H = 0.1;
@@ -10,7 +11,7 @@ const STYLES = [[1, 1, 1], [1.25, 1.0, 0.8], [0.8, 1.0, 1.3], [1.3, 0.8, 1.1]];
 
 function stitchTexture() {
   const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
-  g.fillStyle = '#241a3c'; g.fillRect(0, 0, 128, 128);
+  g.fillStyle = LOOK.inside.plate; g.fillRect(0, 0, 128, 128);
   g.strokeStyle = 'rgba(190,160,230,0.28)'; g.lineWidth = 2; g.setLineDash([6, 6]);
   g.strokeRect(6, 6, 116, 116); g.beginPath(); g.moveTo(64, 6); g.lineTo(64, 122); g.moveTo(6, 64); g.lineTo(122, 64); g.stroke();
   const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set((GW + 6) / 2, (GH + 6) / 2); t.colorSpace = THREE.SRGBColorSpace; return t;
@@ -91,16 +92,17 @@ export class InsideView {
   constructor(world) {
     this.world = world; this.sim = world.sim;
     const scene = this.scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x120c22); scene.fog = new THREE.FogExp2(0x120c22, 0.012);
+    scene.background = new THREE.Color(LOOK.inside.bg); scene.fog = new THREE.FogExp2(LOOK.inside.bg, 0.012 * LOOK.fogMul);
     this.camera = new THREE.PerspectiveCamera(40, 1, 0.5, 300);
-    scene.add(new THREE.HemisphereLight(0xffe8d8, 0x4a3a6a, 1.5)); const dl = new THREE.DirectionalLight(0xfff0d8, 1.3); dl.position.set(-6, 14, 8); scene.add(dl);
+    scene.add(new THREE.HemisphereLight(LOOK.inside.sky, LOOK.inside.ground, LOOK.inside.hemi)); const dl = new THREE.DirectionalLight(LOOK.inside.sun, LOOK.inside.sunI); dl.position.set(-4, 16, 22); dl.target.position.set(12, 0, 8); scene.add(dl); scene.add(dl.target);
+    if (LOOK.shadows) { dl.castShadow = true; dl.shadow.mapSize.set(2048, 2048); const c = dl.shadow.camera; c.left = -20; c.right = 20; c.top = 18; c.bottom = -18; c.near = 2; c.far = 70; dl.shadow.bias = -0.0008; dl.shadow.normalBias = 0.04; dl.shadow.radius = 4; }
     // the folded cloth the pocket sits on
     const tex = stitchTexture();
     this.plate = mesh(G.box, new THREE.MeshToonMaterial({ map: tex, color: 0xffffff, gradientMap: null }), GW / 2, -0.45, GH / 2, GW + 6, 0.4, GH + 6); scene.add(this.plate);
     this.platform = mesh(G.box, toon(0xd9c9a8), GW / 2, -0.17, GH / 2, 1, 0.3, 1); scene.add(this.platform);
     this.pt = { x: 0, z: 0, w: 1, d: 1 }; this.ptTarget = { x: 0, z: 0, w: 1, d: 1 }; this.setPlatformTarget(true);
-    this.floors = new THREE.InstancedMesh(G.box, new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: null }), GW * GH); this.floors.frustumCulled = false; this.floors.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(GW * GH * 3), 3); scene.add(this.floors);
-    this.walls = new THREE.InstancedMesh(G.box, toon(0xe9dcc4), 700); this.walls.frustumCulled = false; scene.add(this.walls);
+    this.floors = new THREE.InstancedMesh(G.box, new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: null }), GW * GH); this.floors.frustumCulled = false; this.floors.receiveShadow = LOOK.shadows; this.floors.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(GW * GH * 3), 3); scene.add(this.floors);
+    this.walls = new THREE.InstancedMesh(G.box, toon(0xe9dcc4), 700); this.walls.frustumCulled = false; this.walls.castShadow = this.walls.receiveShadow = LOOK.shadows; scene.add(this.walls);
     this.doors = new THREE.InstancedMesh(G.box, toon(0xd0a248, { emissive: 0x3a2a08 }), 200); this.doors.frustumCulled = false; scene.add(this.doors);
     this.gridLines = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xb8a888, transparent: true, opacity: 0.55 })); scene.add(this.gridLines);
     this.propGroups = new Map(); this.figures = new Map();
@@ -109,7 +111,7 @@ export class InsideView {
     this.selRoom = null;
     // dust motes
     const n = 90, pos = new Float32Array(n * 3), R = rng(5); this.dust = []; for (let i = 0; i < n; i++) this.dust.push([R() * GW, R() * 5 + 1, R() * GH, R() * 6.28]);
-    const dg = new THREE.BufferGeometry(); dg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); this.dustPts = new THREE.Points(dg, new THREE.PointsMaterial({ size: 0.12, color: 0xffe0b0, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending, map: null })); this.dustPts.frustumCulled = false; scene.add(this.dustPts);
+    const dg = new THREE.BufferGeometry(); dg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); this.dustPts = new THREE.Points(dg, new THREE.PointsMaterial({ size: 0.12, color: 0xffe0b0, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending, map: null })); this.dustPts.frustumCulled = false; scene.add(this.dustPts); if (LOOK.grade && LOOK.grade.edge > 0) this.dustPts.visible = false;
     // sparkle burst for unfolding
     this.sparks = []; this.sparkGroup = new THREE.Group(); scene.add(this.sparkGroup);
     // controls
@@ -207,8 +209,9 @@ export class InsideView {
     return { x: Math.floor(hit.x), y: Math.floor(hit.z) };
   }
   fit(aspect, snap) {
+    this.setPlatformTarget(false);
     const t = this.ptTarget, tan = Math.tan((40 * Math.PI) / 360);
-    const dist = clamp(Math.max((t.d + 1.5) * 0.55 / tan, (t.w + 0.6) * 0.5 / (tan * aspect)), 8, 55);
+    const dist = clamp(Math.max((t.d + 1.5) * 0.55 / tan, (t.w + 1.8) * 0.5 / (tan * aspect)), 8, 55);
     this.controls.target.set(t.x, 0, t.z + 0.4);
     const pol = 0.95; this.camera.position.set(t.x, Math.cos(pol) * dist, t.z + 0.4 + Math.sin(pol) * dist); this.controls.update();
   }

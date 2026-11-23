@@ -1,11 +1,13 @@
 // Shared graphics helpers for both views.
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { LOOK } from './look.js';
 
 let _grad = null, _glow = null;
 export function toonGradient() {
   if (_grad) return _grad;
-  const d = new Uint8Array([80, 80, 80, 255, 160, 160, 160, 255, 220, 220, 220, 255, 255, 255, 255, 255]);
-  _grad = new THREE.DataTexture(d, 4, 1, THREE.RGBAFormat); _grad.minFilter = _grad.magFilter = THREE.NearestFilter; _grad.needsUpdate = true; return _grad;
+  const d = new Uint8Array(LOOK.steps.flatMap((v) => [v, v, v, 255]));
+  _grad = new THREE.DataTexture(d, LOOK.steps.length, 1, THREE.RGBAFormat); _grad.minFilter = _grad.magFilter = THREE.NearestFilter; _grad.needsUpdate = true; return _grad;
 }
 export function glowTexture() {
   if (_glow) return _glow;
@@ -39,9 +41,9 @@ export function gearGeometry(r = 0.3, teeth = 9, depth = 0.08) {
   const g = new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: false }); g.translate(0, 0, -depth / 2); return g;
 }
 export function mesh(geo, mat, x = 0, y = 0, z = 0, sx = 1, sy = 1, sz = 1) {
-  const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.scale.set(sx, sy, sz); return m;
+  const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.castShadow = m.receiveShadow = LOOK.shadows; return m;
 }
-const G = { box: new THREE.BoxGeometry(1, 1, 1), cyl: new THREE.CylinderGeometry(0.5, 0.5, 1, 14), cone: new THREE.ConeGeometry(0.5, 1, 10), sph: new THREE.SphereGeometry(0.5, 12, 9), cap: new THREE.CapsuleGeometry(0.5, 1, 4, 10), tor: new THREE.TorusGeometry(0.5, 0.15, 6, 16) };
+const G = { box: LOOK.rounded ? new RoundedBoxGeometry(1, 1, 1, 3, 0.16) : new THREE.BoxGeometry(1, 1, 1), cyl: new THREE.CylinderGeometry(0.5, 0.5, 1, 14), cone: new THREE.ConeGeometry(0.5, 1, 10), sph: new THREE.SphereGeometry(0.5, 12, 9), cap: new THREE.CapsuleGeometry(0.5, 1, 4, 10), tor: new THREE.TorusGeometry(0.5, 0.15, 6, 16) };
 export { G };
 export const box = (c, x, y, z, w, h, d, extra) => mesh(G.box, toon(c, extra), x, y, z, w, h, d);
 export const cyl = (c, x, y, z, w, h, d, extra) => mesh(G.cyl, toon(c, extra), x, y, z, w, h, d);
