@@ -11,10 +11,10 @@ export class Journey {
     this.keys = new Set(); this.stick = { x: 0, y: 0, id: null }; this.look = null; this.path = []; this.goal = null;
     this.prompt = null; this.nearConsole = false; this.propsKey = '';
     // mouse look: pointer lock when the browser allows it, otherwise steer by where the cursor sits
-    this.locked = false; this.hover = false; this.mouse = { x: 0, y: 0, over: false };
+    this.sens = 1; this.locked = false; this.hover = false; this.mouse = { x: 0, y: 0, over: false };
     document.addEventListener('pointerlockchange', () => { this.locked = document.pointerLockElement === this.world.canvas; this.ui.lock(this.locked); });
     document.addEventListener('pointerlockerror', () => { this.hover = true; this.ui.lock(false); });
-    document.addEventListener('mousemove', (e) => { this.mouse.x = e.clientX; this.mouse.y = e.clientY; this.mouse.over = e.target === this.world.canvas; if (this.active && this.locked) this.turn(e.movementX, e.movementY, 0.45); }, { passive: true });
+    document.addEventListener('mousemove', (e) => { this.mouse.x = e.clientX; this.mouse.y = e.clientY; this.mouse.over = e.target === this.world.canvas; if (this.active && this.locked) this.turn(e.movementX, e.movementY, 0.3); }, { passive: true });
     document.addEventListener('mouseleave', () => { this.mouse.over = false; });
     addEventListener('keydown', (e) => { if (!this.active || /^(INPUT|TEXTAREA)$/.test((e.target || {}).tagName)) return; const k = e.key.toLowerCase(); if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) { this.keys.add(k); this.path = []; this.goal = null; e.preventDefault(); } if ((k === 'e' || k === ' ' || k === 'enter') && !e.repeat) { this.interact(); e.preventDefault(); } });
     addEventListener('keyup', (e) => this.keys.delete(e.key.toLowerCase()));
@@ -125,7 +125,7 @@ export class Journey {
     if (!ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.1), hit)) return null;
     return { x: Math.floor(hit.x), z: Math.floor(hit.z) };
   }
-  turn(dx, dy, k = 1) { this.yaw -= dx * 0.0055 * k; this.pitch = clamp(this.pitch - dy * 0.0045 * k, -1.1, 1.1); }
+  turn(dx, dy, k = 1) { const f = k * this.sens; this.yaw -= dx * 0.0055 * f; this.pitch = clamp(this.pitch - dy * 0.0045 * f, -1.1, 1.1); }
 
   update(dt, time) {
     if (!this.active) return;
@@ -144,7 +144,7 @@ export class Journey {
     // no pointer lock available: turn by where the cursor sits (dead zone in the middle, faster toward the edges)
     if (this.hover && !this.locked && this.mouse.over) {
       const r = this.world.canvas.getBoundingClientRect(), nx = (this.mouse.x - r.left - r.width / 2) / (r.width / 2), ny = (this.mouse.y - r.top - r.height / 2) / (r.height / 2);
-      if (Math.abs(nx) > 0.25) this.yaw -= Math.sign(nx) * ((Math.abs(nx) - 0.25) / 0.75) * 1.9 * dt;
+      if (Math.abs(nx) > 0.25) this.yaw -= Math.sign(nx) * ((Math.abs(nx) - 0.25) / 0.75) * 1.9 * 0.7 * this.sens * dt;
       this.pitch += (clamp(-ny * 0.75, -1, 1) - this.pitch) * Math.min(1, dt * 4);
     }
     // the camera

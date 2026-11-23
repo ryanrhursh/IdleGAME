@@ -58,7 +58,7 @@ const jui = {
   lock(on) { if (on) state.lockSeen = true; mouseUi(); },
 };
 journey = new Journey(world, sim, jui);
-window.__game.journey = journey;
+window.__game.journey = journey; journey.sens = clamp(+state.sens || 1, 0.25, 2);
 let lastInputWrite = 0;
 function markInput() { const n = Date.now(); if (n - lastInputWrite > 1000) { state.lastInput = n; lastInputWrite = n; } }
 ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart'].forEach((ev) => addEventListener(ev, markInput, { passive: true }));
@@ -325,6 +325,7 @@ function renderBook(flip) {
 function menuModal() {
   openModal(`<div class="eyebrow">Settings</div><h2>The Marigold Line</h2>
   <div class="row2"><button class="btn ghost" id="snd">Sound: ${audio.enabled ? 'on' : 'off'}</button><button class="btn ghost" id="rc">Recentre the view</button></div>
+  <div class="slider"><label for="sens">Look sensitivity <b id="sensVal">${(clamp(+state.sens || 1, 0.25, 2)).toFixed(2)}\u00d7</b></label><input type="range" id="sens" min="0.25" max="2" step="0.05" value="${clamp(+state.sens || 1, 0.25, 2)}"></div>
   <div class="row2"><button class="btn ghost" id="ml">Mouse look: ${state.mouselook === false ? 'off' : 'on'} (change)</button></div>
   <div class="row2"><button class="btn ghost" id="ctl">Walking: ${state.controls === 'stick' ? 'joystick' : 'tap to walk'} (change)</button></div>
   <div class="row2"><button class="btn ghost" id="look">Look: ${esc(LOOK.name)} (change)</button></div>
@@ -337,6 +338,7 @@ function menuModal() {
   $('snd').onclick = (e) => { audio.enabled = !audio.enabled; state.sound = audio.enabled; audio.apply(); e.target.textContent = 'Sound: ' + (audio.enabled ? 'on' : 'off'); };
   $('rc').onclick = () => { world.line.recentre(world.aspect); world.inside.fit(world.aspect); closeModal(); };
   $('auto').onclick = (e) => { state.auto = !state.auto; e.target.textContent = `While I'm away, welcome travellers: ${state.auto ? 'yes' : 'no'}`; };
+  $('sens').oninput = (e) => { const v = clamp(+e.target.value, 0.25, 2); state.sens = v; journey.sens = v; $('sensVal').textContent = v.toFixed(2) + '\u00d7'; };
   $('ml').onclick = (e) => { state.mouselook = state.mouselook === false; e.target.textContent = `Mouse look: ${state.mouselook === false ? 'off' : 'on'} (change)`; if (state.mouselook === false) journey.releaseLock(); mouseUi(); };
   $('ctl').onclick = (e) => { state.controls = state.controls === 'stick' ? 'tap' : 'stick'; e.target.textContent = `Walking: ${state.controls === 'stick' ? 'joystick' : 'tap to walk'} (change)`; applyControls(); };
   $('look').onclick = () => { const ids = Object.keys(LOOKS), next = ids[(ids.indexOf(LOOK_ID) + 1) % ids.length]; save(); saveLook(next); location.href = location.pathname + location.hash; };

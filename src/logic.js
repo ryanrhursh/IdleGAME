@@ -73,7 +73,7 @@ export function newState(now = Date.now()) {
     grid: { x0: 6, y0: 4, x1: 15, y1: 9 },
     rooms: [{ id: 1, type: 'sleeper', x: 6, y: 4, w: 3, h: 3 }, { id: 2, type: 'dining', x: 9, y: 4, w: 4, h: 3 }, { id: 3, type: 'corridor', x: 6, y: 7, w: 10, h: 1 }],
     nextRoom: 4, unlocked: ['sleeper', 'dining', 'parlor', 'corridor'],
-    passengers: [], nextPid: 1, keepsakes: [], postcards: [], tickets: [], plates: [], talesHeard: 0, departed: [], mail: [], returns: 0, lettersGot: 0, mode: 'afk', controls: 'tap', jobs: { list: [], done: 0, nextAt: 0, id: 1 }, lastInput: now, journal: [],
+    passengers: [], nextPid: 1, keepsakes: [], postcards: [], tickets: [], plates: [], talesHeard: 0, departed: [], mail: [], returns: 0, lettersGot: 0, mode: 'afk', controls: 'tap', sens: 1, jobs: { list: [], done: 0, nextAt: 0, id: 1 }, lastInput: now, journal: [],
     line: { seed: Math.floor(Math.random() * 1e9), region: 'M', regionStart: 0, nextStop: 2.5, stopIndex: 0, nextLandmark: 7, forkChosen: null, forkAnnounced: false, pending: null },
     hint: 0, auto: false, sound: true, name: '', paintSeen: false,
   };
