@@ -1,5 +1,5 @@
 // Game rules and simulation for the Marigold Line. No rendering code lives here.
-import { ROOMS, HOBBY_ROOM, PASSENGERS, GEN_FIRST, GEN_LAST, GEN_TYPES, REGION_ADJ, REGION_NOUN, STOP_A, STOP_B, PALETTES, WEATHER, HINT_WORDS, LANDMARKS, POSTCARD_OPEN, LORE, PLATE_LINES, TELLS, REPLIES, LETTERS, RETURN_LINES, FAREWELLS, CHAT_LINES, JOB_FLAVOR } from './data.js';
+import { ROOMS, HOBBY_ROOM, PASSENGERS, GEN_FIRST, GEN_LAST, GEN_TYPES, REGION_ADJ, REGION_NOUN, STOP_A, STOP_B, PALETTES, WEATHER, HINT_WORDS, LANDMARKS, POSTCARD_OPEN, LORE, PLATE_LINES, TELLS, REPLIES, LETTERS, RETURN_LINES, FAREWELLS, CHAT_LINES, JOB_FLAVOR, OCCUPATIONS, QUIRKS, SECRETS, REGION_FLAVOR, RELATIONS, FRIEND_LINES, SQUABBLE_LINES, WISH_LINES } from './data.js';
 
 export const GW = 24, GH = 16;
 export const BASE_SPEED = 0.12; // miles per second at idle pressure
@@ -38,32 +38,62 @@ export function autoSide(seed, region) { return rng(hash(`f:${seed}:${region}`))
 export function stopName(seed, i) { const r = rng(hash(`stop:${seed}:${i}`)); return `${STOP_A[Math.floor(r() * STOP_A.length)]} ${STOP_B[Math.floor(r() * STOP_B.length)]}`; }
 
 // ---------- passengers ----------
+export const firstOf = (name) => (name.startsWith('The Lady') ? 'The Lady' : name.replace(/^(Mr\.|Mrs\.|Madame|Old)\s+/, '').split(' ')[0]);
+const cap1 = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+function genWish(hobby, r, name) {
+  const room = HOBBY_ROOM[hobby] || 'parlor', rn = ROOMS[room].name, k = r();
+  if (k < 0.3) return { kind: 'room', type: room, area: 6, text: `A ${rn} with room to breathe.` };
+  if (k < 0.55) return { kind: 'furnish', type: room, level: 2, text: `A ${rn} loved well enough to glow.` };
+  if (k < 0.8) { const n = 3 + Math.floor(r() * 3); return { kind: 'visit', n, text: `To see ${n} new places before ${name} gets off.` }; }
+  return { kind: 'bond', n: 1, text: 'A friend aboard, someone to sit beside.' };
+}
 export function passengerAt(index, seed) {
-  if (index < PASSENGERS.length) { const d = PASSENGERS[index]; return { kind: 'a', idx: index, name: d.name, trait: d.trait, hobby: d.hobby, gift: d.gift, line: d.line, tales: d.tales, keep: d.keep }; }
+  if (index < PASSENGERS.length) { const d = PASSENGERS[index]; return { kind: 'a', idx: index, name: d.name, trait: d.trait, hobby: d.hobby, gift: d.gift, line: d.line, tales: d.tales, keep: d.keep, beds: d.beds == null ? 1 : d.beds, mult: d.mult || 1, wish: d.wish || null }; }
   const r = rng(hash(`pass:${seed}:${index}`));
   const gt = Math.floor(r() * GEN_TYPES.length), g = GEN_TYPES[gt];
   const first = GEN_FIRST[Math.floor(r() * GEN_FIRST.length)], last = GEN_LAST[Math.floor(r() * GEN_LAST.length)];
-  const n = first;
+  const occ = Math.floor(r() * OCCUPATIONS.length), qk = Math.floor(r() * QUIRKS.length), sc = Math.floor(r() * SECRETS.length);
+  const wish = genWish(g.hobby, r, first);
+  return { kind: 'g', idx: index, gt, occ, qk, sc, wish, ...genDef({ gt, occ, qk, sc, name: `${first} ${last}` }), name: `${first} ${last}`, beds: 1, mult: 1 };
+}
+// everything about a generated passenger comes from four small numbers, so it can be rebuilt anywhere
+function genDef(p) {
+  const g = GEN_TYPES[p.gt], n = firstOf(p.name), sub = (t) => t.replace(/\{n\}/g, n);
+  const o = OCCUPATIONS[p.occ == null ? 0 : p.occ], q = QUIRKS[p.qk == null ? 0 : p.qk], sc = SECRETS[p.sc == null ? 0 : p.sc];
+  const rich = p.occ != null;
+  const trait = rich ? `${cap1(o.job)}, ${q}` : g.trait;
+  const hobbyTxt = g.trait.charAt(0).toLowerCase() + g.trait.slice(1);
   return {
-    kind: 'g', idx: index, gt, name: `${first} ${last}`, trait: g.trait, hobby: g.hobby, gift: HOBBY_ROOM[g.hobby] === 'parlor' ? null : (HOBBY_ROOM[g.hobby] || null),
-    line: `${first} ${last} steps onto the platform with a single bag and a look of quiet certainty. "${g.trait}. That is all you need to know. May I come aboard?"`,
-    tales: g.tales.map((t) => t.replace(/\{n\}/g, n)), keep: { name: `${first}'s keepsake`, line: 'Something small is left behind, and it makes the room feel kinder.' },
+    trait, hobby: g.hobby, gift: HOBBY_ROOM[g.hobby] === 'parlor' ? null : (HOBBY_ROOM[g.hobby] || null),
+    line: rich ? `${p.name} steps onto the platform with a single bag. A tag on it reads: "${cap1(o.job)}." "${cap1(hobbyTxt)}," ${n} adds, "if that is any use. May I come aboard?"` : `${p.name} steps onto the platform with a single bag and a look of quiet certainty. "${g.trait}. That is all you need to know. May I come aboard?"`,
+    tales: rich ? [sub(o.tale), sub(g.tales[1]), sub(sc)] : g.tales.map(sub),
+    keep: { name: `${n}'s keepsake`, line: rich ? `${n} leaves something small behind, tied with a ribbon. It is exactly the kind of thing ${o.job.replace(/^an? /, 'a ')} would give.` : 'Something small is left behind, and it makes the room feel kinder.' },
   };
 }
 export function defOf(p) {
-  if (p.kind === 'a') { const d = PASSENGERS[p.idx]; return { ...d, kind: 'a' }; }
-  const g = GEN_TYPES[p.gt], n = p.name.split(' ')[0];
-  return { trait: g.trait, hobby: g.hobby, tales: g.tales.map((t) => t.replace(/\{n\}/g, n)), keep: { name: `${n}'s keepsake`, line: 'Something small is left behind, and it makes the room feel kinder.' } };
+  if (p.kind === 'a') { const d = PASSENGERS[p.idx]; return { ...d, kind: 'a', beds: d.beds == null ? 1 : d.beds, mult: d.mult || 1 }; }
+  return { ...genDef(p), beds: 1, mult: 1 };
 }
+// who gets on with whom: authored pairs first, otherwise a stable hash of the two names
+const RIVAL_ACTS = ['dispute the correct way to stir tea', 'argue, politely, about whose turn it is', 'disagree about the window seat', 'compare notes and find they have none in common'];
+const FRIEND_ACTS = ['share a pot of tea and a long silence', 'swap stories without once interrupting', 'sit side by side and say nothing, happily', 'finish each other\'s sentences and apologise for it'];
+export function relOf(na, nb) {
+  for (const [a, b, kind, act] of RELATIONS) if ((a === na && b === nb) || (a === nb && b === na)) return { kind, act };
+  const h = hash('rel:' + (na < nb ? na + '|' + nb : nb + '|' + na)) % 100;
+  if (h < 14) return { kind: 'friends', act: FRIEND_ACTS[h % FRIEND_ACTS.length] };
+  if (h < 22) return { kind: 'rivals', act: RIVAL_ACTS[h % RIVAL_ACTS.length] };
+  return { kind: 'neutral', act: '' };
+}
+export const relKey = (na, nb) => (na < nb ? na + '|' + nb : nb + '|' + na);
 
 // ---------- meeting people ----------
 const LEANS = ['warm', 'curious', 'space'];
 export function leaningOf(c) { return LEANS[hash('lean:' + c.name) % 3]; }
-export function tellOf(c) { const a = TELLS[leaningOf(c)]; return a[hash('tell:' + c.name) % a.length].replace(/\{name\}/g, c.name.split(' ')[0]); }
+export function tellOf(c) { const a = TELLS[leaningOf(c)]; return a[hash('tell:' + c.name) % a.length].replace(/\{name\}/g, firstOf(c.name)); }
 // How the conversation at a stop goes. Everyone is welcome either way; reading them well starts things warmer.
 export function talkOutcome(c, choice) {
   const d = (LEANS.indexOf(choice) - LEANS.indexOf(leaningOf(c)) + 3) % 3, level = d === 0 ? 'delighted' : d === 1 ? 'warm' : 'polite';
-  return { choice, level, mood: { delighted: 34, warm: 16, polite: 9 }[level], reply: REPLIES[level][choice].replace(/\{name\}/g, c.name.split(' ')[0]) };
+  return { choice, level, mood: { delighted: 34, warm: 16, polite: 9 }[level], reply: REPLIES[level][choice].replace(/\{name\}/g, firstOf(c.name)) };
 }
 
 // ---------- state ----------
@@ -73,7 +103,7 @@ export function newState(now = Date.now()) {
     grid: { x0: 6, y0: 4, x1: 15, y1: 9 },
     rooms: [{ id: 1, type: 'sleeper', x: 6, y: 4, w: 3, h: 3 }, { id: 2, type: 'dining', x: 9, y: 4, w: 4, h: 3 }, { id: 3, type: 'corridor', x: 6, y: 7, w: 10, h: 1 }],
     nextRoom: 4, unlocked: ['sleeper', 'dining', 'parlor', 'corridor'],
-    passengers: [], nextPid: 1, keepsakes: [], postcards: [], tickets: [], plates: [], talesHeard: 0, departed: [], mail: [], returns: 0, lettersGot: 0, mode: 'afk', controls: 'tap', sens: 1, jobs: { list: [], done: 0, nextAt: 0, id: 1 }, lastInput: now, journal: [],
+    passengers: [], nextPid: 1, keepsakes: [], postcards: [], tickets: [], plates: [], talesHeard: 0, departed: [], mail: [], returns: 0, lettersGot: 0, wishes: 0, peace: 0, rel: {}, mode: 'afk', controls: 'tap', sens: 1, jobs: { list: [], done: 0, nextAt: 0, id: 1 }, lastInput: now, journal: [],
     line: { seed: Math.floor(Math.random() * 1e9), region: 'M', regionStart: 0, nextStop: 2.5, stopIndex: 0, nextLandmark: 7, forkChosen: null, forkAnnounced: false, pending: null },
     hint: 0, auto: false, sound: true, name: '', paintSeen: false,
   };
@@ -101,9 +131,9 @@ export class Sim {
     this.speed = 0; this.version = 0; this.journey = false; this.carry = null; this.conductor = null;
     this.index();
   }
-  ev(name, a, b) {
+  ev(name, a, b, c) {
     if (this.quiet) { const q = this.quiet; if (name === 'postcard') q.postcards.push(a); else if (name === 'depart') q.departed.push(a); else if (name === 'region') q.regions.push(a); else if (name === 'board') q.boarded.push(a); else if (name === 'letter') q.postcards.push(a); else if (name === 'fork') { /* ignored offline */ } return; }
-    const f = this.h[name]; if (f) f(a, b);
+    const f = this.h[name]; if (f) f(a, b, c);
   }
 
   // ---------- interior index ----------
@@ -315,7 +345,7 @@ export class Sim {
     else if (kind === 'lookout') { job.title = 'Keep a lookout'; job.desc = 'Look out of a window, then tell a passenger what you saw.'; job.data = { seen: null }; }
     else if (kind === 'fetch') {
       const opts = ps.map((p) => ({ p, f: this.fetchFor(p) })).filter((o) => o.f), o = pick(opts);
-      job.title = 'An errand'; job.desc = `Bring ${o.p.name.split(' ')[0]} ${o.f.item} from the ${ROOMS[o.f.room.type].name}.`; job.data = { to: o.p.id, name: o.p.name, rid: o.f.room.id, item: o.f.item };
+      job.title = 'An errand'; job.desc = `Bring ${firstOf(o.p.name)} ${o.f.item} from the ${ROOMS[o.f.room.type].name}.`; job.data = { to: o.p.id, name: o.p.name, rid: o.f.room.id, item: o.f.item };
     } else if (kind === 'water' || kind === 'lamps') {
       const rooms = kind === 'water' ? s.rooms.filter((r) => r.type === 'garden') : s.rooms.filter((r) => r.w * r.h >= 4 && r.type !== 'corridor'), r = pick(rooms), spots = [];
       const cand = [(i) => ({ x: r.x + 0.5 + Math.random() * (r.w - 1), z: r.y + 0.22 }), () => ({ x: r.x + 0.5 + Math.random() * (r.w - 1), z: r.y + r.h - 0.22 }), () => ({ x: r.x + 0.22, z: r.y + 0.5 + Math.random() * (r.h - 1) }), () => ({ x: r.x + r.w - 0.22, z: r.y + 0.5 + Math.random() * (r.h - 1) })].sort(() => Math.random() - 0.5);
@@ -376,7 +406,7 @@ export class Sim {
     }
     if (type === 'tell') {
       const job = find('lookout'); if (!job || !job.data.seen) return null; const p = this.s.passengers.find((q) => q.id === data.pid); if (!p) return null;
-      this.addMood(p, 4); this.completeJob(job); return `${p.name.split(' ')[0]} leans toward the glass too. "So it is. Thank you for telling me."`;
+      this.addMood(p, 4); this.completeJob(job); return `${firstOf(p.name)} leans toward the glass too. "So it is. Thank you for telling me."`;
     }
     if (type === 'stoke') { const job = find('stoke'); if (job && this.s.pressure >= job.data.target) { this.completeJob(job); } return null; }
     if (type === 'bag') { const job = find('post'); if (job && !this.carry) { this.carry = { kind: 'post', to: job.data.to }; return `You take the post bag. It is addressed to ${job.data.name}.`; } return this.carry ? 'Your hands are full.' : 'There is no post today.'; }
@@ -391,33 +421,41 @@ export class Sim {
   // Talking in person: unheard tales come first, then ordinary chat.
   chatWith(pid) {
     const p = this.s.passengers.find((q) => q.id === pid); if (!p) return null;
-    const d = defOf(p), first = p.name.split(' ')[0];
+    const d = defOf(p), first = firstOf(p.name);
     p.told = p.told || 0; this.addMood(p, 2); this.s.charm += 2 * this.charmMul;
+    const peace = this.makePeace(p); if (peace) return { text: peace, tale: false, peace: true };
     if (p.told < p.tales) { const t = d.tales[p.told++]; return { text: t, tale: true }; }
     const r = rng(hash(`chat:${p.id}:${p.told}:${Math.floor(Date.now() / 60000)}`)); return { text: CHAT_LINES[Math.floor(r() * CHAT_LINES.length)].replace(/\{name\}/g, first), tale: false };
   }
 
   // ---------- passengers ----------
-  freeBeds() { return this.beds - this.s.passengers.length; }
+  bedsUsed() { return this.s.passengers.reduce((a, p) => a + defOf(p).beds, 0); }
+  freeBeds() { return this.beds - this.bedsUsed(); }
+  stopFits() { const sp = this.stopPerson(); return !!sp && this.fits(sp.c); }
+  fits(c) { return !c.beds || this.freeBeds() >= c.beds; }
   candidate() { return passengerAt(this.s.metCount, this.s.line.seed); }
   stopPerson() {
     const L = this.s.line, st = L.pending; if (!st) return null;
     if (st.returning !== undefined) { const rec = this.s.departed[st.returning]; return { returning: true, rec, c: { ...passengerAt(rec.idx, L.seed), name: rec.name } }; }
-    return { returning: false, c: passengerAt(st.idx, L.seed) };
+    const c = passengerAt(st.idx, L.seed), rg = this.region(), n = firstOf(c.name);
+    const fl = REGION_FLAVOR[hash('fl:' + c.name) % REGION_FLAVOR.length].replace('{hint}', rg.hint).replace(/\{n\}/g, n);
+    return { returning: false, c: { ...c, line: c.line + ' ' + fl } };
   }
   invite(opts = {}) {
     const L = this.s.line, st = L.pending; if (!st) return 'Nobody is waiting.';
-    if (this.freeBeds() <= 0) return 'No berth free. Build more Sleeper space, or wait for someone to reach their stop.';
     const s = this.s, sl = s.rooms.find((r) => r.type === 'sleeper');
+    const need = (st.returning !== undefined ? passengerAt(s.departed[st.returning].idx, L.seed) : passengerAt(st.idx, L.seed));
+    if (!this.fits(need)) return need.beds > 1 ? `${firstOf(need.name)} needs ${need.beds} free berths. Build more Sleeper space, or wait for someone to reach their stop.` : 'No berth free. Build more Sleeper space, or wait for someone to reach their stop.';
     if (st.returning !== undefined) {
       const rec = s.departed[st.returning], c = passengerAt(rec.idx, L.seed), hobby = c.hobby || 'chat';
       const tales = Math.min(3, rec.tales || 0);
       const p = { id: s.nextPid++, kind: c.kind, idx: c.idx, gt: c.gt, name: rec.name, mood: Math.max(55, [0, 30, 60, 90][tales]), tales, board: s.miles, dest: s.miles + 130 + Math.floor(Math.random() * 200), x: sl.x + 0.5, y: sl.y + 0.5, visits: (rec.visits || 0) + 1, since: RETURN_LINES[hobby] || RETURN_LINES.chat, first: { level: 'returned' } };
+      p.occ = c.occ; p.qk = c.qk; p.sc = c.sc; p.v0 = s.tickets.length; p.wish = rec.wishState === 'granted' ? null : (c.wish || null); p.wishState = p.wish ? 'open' : null; p.wishSeen = !!rec.wishSeen; p.rel0 = 0;
       rec.back = true; s.returns = (s.returns || 0) + 1; s.charm += 40; s.passengers.push(p); L.pending = null;
       this.syncRt(); this.postcard(`${p.name} is back aboard. ${p.since}`, 'platform'); this.ev('board', p, c); return null;
     }
     const c = passengerAt(st.idx, L.seed);
-    const p = { id: s.nextPid++, kind: c.kind, idx: c.idx, gt: c.gt, name: c.name, mood: opts.mood != null ? opts.mood : 6, tales: 0, board: s.miles, dest: s.miles + 130 + Math.floor(rng(hash('d' + c.idx + L.seed))() * 200), x: sl.x + 0.5, y: sl.y + 0.5, first: { level: opts.level || 'quick', choice: opts.choice || null } };
+    const p = { id: s.nextPid++, kind: c.kind, idx: c.idx, gt: c.gt, name: c.name, mood: opts.mood != null ? opts.mood : 6, tales: 0, board: s.miles, dest: s.miles + 130 + Math.floor(rng(hash('d' + c.idx + L.seed))() * 200), x: sl.x + 0.5, y: sl.y + 0.5, first: { level: opts.level || 'quick', choice: opts.choice || null }, occ: c.occ, qk: c.qk, sc: c.sc, v0: s.tickets.length, wish: c.wish || null, wishState: c.wish ? 'open' : null, wishSeen: false };
     s.passengers.push(p); s.metCount = st.idx + 1; L.pending = null;
     if (c.gift && !s.unlocked.includes(c.gift)) { s.unlocked.push(c.gift); this.ev('unlock', c.gift, c); }
     this.syncRt(); this.ev('board', p, c); this.addMood(p, 0); return null;
@@ -471,14 +509,14 @@ export class Sim {
       const room = this.roomById.get(rt.room), d = defOf(p), fav = room && room.type === HOBBY_ROOM[d.hobby];
       const L = rt.len || 0, walkPenalty = L <= 6 ? 1.25 : L <= 12 ? 1 : L <= 18 ? 0.85 : 0.7;
       if (!rt.emoted) { rt.emoted = true; if (fav) this.ev('emote', { id: p.id, kind: 'heart' }); }
-      this.s.charm += 0.45 * (this.journey ? 1.25 : 1) * this.moodF(p) * (fav ? 2 : 1) * (1 + 0.2 * ((room && room.lv) || 0)) * this.charmMul * (this.s.line.pending ? 0.5 : 1) * walkPenalty * dt;
+      this.s.charm += 0.45 * (this.journey ? 1.25 : 1) * this.moodF(p) * (defOf(p).mult) * (rt.buddy ? 1.2 : 1) * (fav ? 2 : 1) * (1 + 0.2 * ((room && room.lv) || 0)) * this.charmMul * (this.s.line.pending ? 0.5 : 1) * walkPenalty * dt;
       this.addMood(p, (fav ? 0.5 : 0.15) * dt);
       if (rt.use <= 0) { rt.state = 'idle'; rt.t = 1 + Math.random() * 2.5; rt.room = rt.room; }
     }
   }
   charmRate() {
     let sum = 0;
-    for (const p of this.s.passengers) sum += 0.45 * this.moodF(p) * 0.55 * 1.3;
+    for (const p of this.s.passengers) sum += 0.45 * this.moodF(p) * defOf(p).mult * 0.55 * 1.3;
     const rooms = this.s.rooms.filter((r) => r.type !== 'corridor' && r.type !== 'sleeper'), lv = rooms.length ? rooms.reduce((x, r) => x + (r.lv || 0), 0) / rooms.length : 0;
     return sum * (1 + 0.2 * lv * 0.6) * this.charmMul * (this.s.line.pending ? 0.5 : 1);
   }
@@ -549,16 +587,19 @@ export class Sim {
     return dm - left;
   }
   depart(p) {
-    const s = this.s, d = defOf(p), hobby = d.hobby || 'chat', first = p.name.split(' ')[0];
+    const s = this.s, d = defOf(p), hobby = d.hobby || 'chat', first = firstOf(p.name);
     s.passengers = s.passengers.filter((q) => q !== p); this.rt.delete(p.id);
     s.keepsakes.push({ who: p.name, name: d.keep.name, line: d.keep.line });
     if (!s.departed) s.departed = []; if (!s.mail) s.mail = [];
-    s.departed.push({ idx: p.idx, kind: p.kind, gt: p.gt, name: p.name, mood: p.mood, tales: p.tales, at: s.miles, back: false, visits: p.visits || 0 });
+    s.departed.push({ idx: p.idx, kind: p.kind, gt: p.gt, name: p.name, mood: p.mood, tales: p.tales, at: s.miles, back: false, visits: p.visits || 0, wishState: p.wishState || null, wishSeen: !!p.wishSeen });
     if (s.departed.length > 40) s.departed.shift();
     const r = rng(hash(`mail:${s.line.seed}:${p.id}`));
     s.mail.push({ who: p.name, hobby, due: s.miles + 30 + r() * 80, place: stopName(s.line.seed, 200 + p.id), v: Math.floor(r() * 2) });
     this.postcard(`${p.name} stepped off at their stop and left behind ${d.keep.name.toLowerCase()}.`, 'platform');
-    this.ev('depart', { p, keep: d.keep, farewell: (FAREWELLS[hobby] || FAREWELLS.chat).replace(/\{name\}/g, first) });
+    let farewell = (FAREWELLS[hobby] || FAREWELLS.chat).replace(/\{name\}/g, first);
+    if (p.wish && p.wishState === 'granted') farewell += ' ' + WISH_LINES.granted[0].replace(/\{n\}/g, first);
+    else if (p.wish && p.wishSeen) farewell += ' ' + WISH_LINES.missed[0].replace(/\{n\}/g, first).replace('{wish}', p.wish.text.charAt(0).toLowerCase() + p.wish.text.slice(1));
+    this.ev('depart', { p, keep: d.keep, farewell, wish: p.wish ? p.wishState : null });
   }
   deliverMail() {
     const s = this.s; if (!s.mail || !s.mail.length) return;
@@ -577,7 +618,56 @@ export class Sim {
     if (!L.pending) this.advance(this.speed * dt);
     for (const p of s.passengers) this.updateP(p, dt);
     this.t.jobs = (this.t.jobs || 0) + dt; if (this.t.jobs > 2) { this.t.jobs = 0; this.ensureJobs(); }
-    this.t.lore += dt; if (this.t.lore > 2) { this.t.lore = 0; this.checkProgress(); }
+    this.t.lore += dt; if (this.t.lore > 2) { this.t.lore = 0; this.checkProgress(); this.checkWishes(); }
+    this.t.rel = (this.t.rel || 0) + dt; if (this.t.rel > 1) { const k = this.t.rel; this.t.rel = 0; this.relTick(k); }
+  }
+  // ---- wishes: each person hopes for one thing. Meeting it is a joy; missing it is only a little sad. ----
+  wishProgress(p) {
+    const w = p.wish, s = this.s; if (!w) return 0;
+    if (w.kind === 'room') return Math.min(1, Math.max(0, ...s.rooms.filter((r) => r.type === w.type).map((r) => (r.w * r.h) / w.area), 0));
+    if (w.kind === 'furnish') return Math.min(1, Math.max(0, ...s.rooms.filter((r) => (w.type === 'any' ? r.type !== 'corridor' : r.type === w.type)).map((r) => (r.lv || 0) / w.level), 0));
+    if (w.kind === 'visit') return Math.min(1, (s.tickets.length - (p.v0 || 0)) / w.n);
+    if (w.kind === 'bond') return Math.min(1, this.bondsOf(p) / w.n);
+    return 0;
+  }
+  bondsOf(p) { let n = 0; for (const q of this.s.passengers) if (q !== p) { const x = this.s.rel[relKey(p.name, q.name)]; if (x && x.bond >= 30) n++; } return n; }
+  checkWishes() {
+    for (const p of this.s.passengers) {
+      if (!p.wish || p.wishState !== 'open') continue;
+      if (!p.wishSeen && p.mood >= 30) { p.wishSeen = true; this.ev('wishseen', p, p.wish); }
+      if (this.wishProgress(p) >= 1) {
+        p.wishState = 'granted'; p.wishSeen = true; this.s.wishes = (this.s.wishes || 0) + 1; this.s.charm += 120 * this.charmMul; this.addMood(p, 25);
+        this.postcard(`${p.name}'s wish came true. ${p.wish.text}`, 'platform'); this.ev('wish', p, p.wish); this.ev('emote', { id: p.id, kind: 'heart' });
+      }
+    }
+  }
+  // ---- friends and rivals: people sharing a room become something to each other ----
+  relTick(dt) {
+    const s = this.s, by = new Map();
+    for (const p of s.passengers) { const rt = this.rt.get(p.id); if (rt) rt.buddy = false; if (rt && rt.room != null && (rt.state === 'use' || rt.state === 'walk')) { if (!by.has(rt.room)) by.set(rt.room, []); by.get(rt.room).push(p); } }
+    for (const [, g] of by) for (let i = 0; i < g.length; i++) for (let j = i + 1; j < g.length; j++) {
+      const a = g[i], b = g[j], rel = relOf(a.name, b.name); if (rel.kind === 'neutral') continue;
+      const k = relKey(a.name, b.name), x = s.rel[k] || (s.rel[k] = { bond: 0, tension: 0, feud: false });
+      if (rel.kind === 'friends') {
+        const was = x.bond; x.bond = Math.min(100, x.bond + 0.8 * dt); this.addMood(a, 0.25 * dt); this.addMood(b, 0.25 * dt); this.rt.get(a.id).buddy = this.rt.get(b.id).buddy = true;
+        if (was < 30 && x.bond >= 30) { const t = FRIEND_LINES[0].replace('{a}', firstOf(a.name)).replace('{b}', firstOf(b.name)).replace('{act}', rel.act); this.postcard(t, 'platform'); this.ev('bond', a, b, t); this.ev('emote', { id: a.id, kind: 'heart' }); this.ev('emote', { id: b.id, kind: 'heart' }); }
+      } else {
+        x.tension += dt;
+        if (!x.feud && x.tension >= 28) {
+          x.feud = true; x.since = s.miles; this.addMood(a, -6); this.addMood(b, -6);
+          const t = SQUABBLE_LINES[0].replace('{a}', firstOf(a.name)).replace('{b}', firstOf(b.name)).replace('{act}', rel.act); this.ev('squabble', a, b, t); this.ev('emote', { id: a.id, kind: 'spark' }); this.ev('emote', { id: b.id, kind: 'spark' });
+        }
+        if (x.feud) { this.addMood(a, -0.15 * dt); this.addMood(b, -0.15 * dt); if (s.miles - (x.since || 0) > 6) { x.feud = false; x.tension = -20; } }
+      }
+    }
+  }
+  // who is currently quarrelling with this person
+  feudWith(p) { for (const q of this.s.passengers) if (q !== p) { const x = this.s.rel[relKey(p.name, q.name)]; if (x && x.feud) return { q, x }; } return null; }
+  makePeace(p) {
+    const f = this.feudWith(p); if (!f) return null;
+    f.x.feud = false; f.x.tension = -40; f.x.bond = Math.max(f.x.bond, 10) + 8; this.s.peace = (this.s.peace || 0) + 1; this.s.charm += 40 * this.charmMul;
+    this.addMood(p, 8); this.addMood(f.q, 8);
+    return `You sit between ${firstOf(p.name)} and ${firstOf(f.q.name)} and say very little, and somehow that is enough. They are laughing within a minute. (+${Math.round(40 * this.charmMul)} Charm)`;
   }
   addPlate(reg) {
     const s = this.s; if (!s.plates) s.plates = [];
@@ -587,7 +677,7 @@ export class Sim {
   }
   loreCtx() {
     const s = this.s;
-    return { miles: s.miles, aboard: s.passengers.length, met: s.metCount, unfolds: s.unfolds, rooms: s.rooms.length, keepsakes: s.keepsakes.length, postcards: s.postcards.length, tickets: s.tickets.length, tales: s.talesHeard || 0, returns: s.returns || 0, letters: s.lettersGot || 0, jobs: (s.jobs && s.jobs.done) || 0, looks: s.looks || 0, levels: s.rooms.reduce((a, r) => a + (r.lv || 0), 0) };
+    return { miles: s.miles, aboard: s.passengers.length, met: s.metCount, unfolds: s.unfolds, rooms: s.rooms.length, keepsakes: s.keepsakes.length, postcards: s.postcards.length, tickets: s.tickets.length, tales: s.talesHeard || 0, returns: s.returns || 0, letters: s.lettersGot || 0, wishes: s.wishes || 0, bonds: Object.values(s.rel || {}).filter((x) => x.bond >= 30).length, peace: s.peace || 0, jobs: (s.jobs && s.jobs.done) || 0, looks: s.looks || 0, levels: s.rooms.reduce((a, r) => a + (r.lv || 0), 0) };
   }
   loreProgress(e) {
     const ks = Object.keys(e.need); if (!ks.length) return 1;
@@ -616,13 +706,13 @@ export class Sim {
     while (travel > 1e-6 && guard++ < 50) {
       const used = this.advance(travel); travel -= used;
       if (s.line.pending) {
-        if (s.auto && this.freeBeds() > 0) { if (this.invite() !== null) break; } else break;
+        if (s.auto && this.stopFits()) { if (this.invite() !== null) break; } else break;
       } else if (used <= 1e-9) break;
     }
     this.quiet = null;
     rep.charm = s.charm - c0; rep.miles = s.miles - m0; rep.waiting = s.line.pending;
     rep.postcards = rep.postcards.slice(-5);
-    this.checkProgress();
+    this.checkProgress(); this.checkWishes();
     return rep;
   }
 }

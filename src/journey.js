@@ -1,6 +1,6 @@
 // Journey mode: walk the Marigold as the conductor, in first person.
 import * as THREE from 'three';
-import { clamp, SPOT_JOBS } from './logic.js';
+import { clamp, SPOT_JOBS, firstOf } from './logic.js';
 
 const EYE = 0.6, SPEED = 1.9, REACH = 1.45;
 
@@ -58,7 +58,7 @@ export class Journey {
   describe(it) {
     const sim = this.sim, J = sim.s.jobs.list, carry = sim.carry;
     if (it.kind === 'pax') {
-      const first = it.name.split(' ')[0];
+      const first = firstOf(it.name);
       if (carry && carry.kind === 'tea' && J.find((j) => j.kind === 'tea' && !j.data.served.includes(it.id))) return { label: `Serve tea to ${first}`, act: 'serve' };
       if (carry && carry.kind === 'post' && carry.to === it.id) return { label: `Give ${first} the post`, act: 'deliver' };
       if (carry && carry.kind === 'item' && carry.to === it.id) return { label: `Give ${first} ${carry.item}`, act: 'deliver' };

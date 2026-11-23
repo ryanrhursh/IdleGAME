@@ -1,6 +1,14 @@
 # Hand-off notes
 
-## Latest: more to do in Journey mode
+## Latest: richer passengers
+- **Wishes.** Everyone carries one hope (build a bigger Garden, furnish a room to level 2-3, see N new regions, make a friend). It is revealed once they feel at home (mood 30), shown in People / the Book with a progress bar, and granted automatically (+120 Charm, mood up, slip + postcard). If they leave without it, the farewell is wistful, never punishing, and a returning guest brings the wish back.
+- **Friends and rivals.** Pairs are fixed for the 15 authored folk (see `RELATIONS` in `data.js`) and hashed for everyone else (~14% friends, ~8% rivals). The stop card hints at who they would get on with. Friends sharing a room build a bond (+mood, +20% Charm); rivals sharing a room eventually squabble (toast + orange spark). In Journey, **talk to either one** to make peace (+40 Charm); in AFK mode it blows over on its own.
+- **Odd guests.** Hortensia Bell needs 2 berths; Mr. Pennywhistle (a ghost) and Pip (a dragon in a teapot) take none but are worth +30% / +20% Charm. Berths are now counted per guest (`freeBeds()`), the stop card says what they need.
+- **Richer strangers.** Generated passengers combine occupation x quirk x secret x hobby (14 x 12 x 10 x 8), with a region flavour line at the stop. Their three tales are now: their trade, their hobby, a secret.
+- New story chapters: *The Thing They Hoped For*, *Two Chairs, Pulled Close*, *The Art of Sitting Between*, *A Train of Small Miracles*.
+- Names with titles ("Mr. Pennywhistle", "Madame Oussou") are shortened with `firstOf()` in all dialogue.
+
+## Earlier: more to do in Journey mode
 - **Windows:** every room with an outside wall gets a window with a live picture of the Line (scenery, weather and stations passing). Rooms with tall furniture against a wall skip that wall. Interact to look out: you are told what is out there (a landmark, a station, the region).
 - **People are solid:** you slide around passengers instead of through them, and a passenger who would walk into you waits a few seconds, then carries on, so nobody is ever stuck.
 - **Hands:** you see your own hands, and what you carry: a cup of tea (with steam), the post bag, or the thing you are fetching.
@@ -61,6 +69,9 @@ State of the game after the overnight build. Branch: `claude/jolly-goodall-vx6xf
 - [ ] Sound: tap once, then check the chuff, whistle and chime sounds are pleasant, and the Sound toggle works.
 - [ ] Add to Home Screen, open from the icon. Full screen? Does the save carry over?
 - [ ] Fork: do you notice the signs and the choice banner? Is it clear what the choice does?
+- [ ] Richer passengers: do wishes feel like a gentle goal or like homework? Is the reveal (mood 30) timed well? Does the wistful farewell land?
+- [ ] Friends and rivals: do the stop-card hints ("would get on well with / might clash with") make inviting feel like a choice? Does "talk to them" in Journey make peace clearly enough?
+- [ ] Odd guests: invite Hortensia (needs 2 berths) with a full train and check the message; does the ghost/dragon (no berth) feel special?
 - [ ] Anything that feels like a chore. That is the thing to cut first.
 
 ## Known gaps and honest caveats
@@ -73,7 +84,6 @@ State of the game after the overnight build. Branch: `claude/jolly-goodall-vx6xf
 - Pages: if GitHub Pages points at this branch, each push goes live. Switch it to `main` to freeze.
 
 ## Ideas for next phases
-- Passenger relationships (who likes whom, shared rooms) and small story events between them.
 - Visible train curve and branch geometry at forks.
 - Weather that reaches inside (rain on windows) and a Lost & Found car for keepsakes.
 - Room-specific mini-actions (feed the fish, water the garden) as optional active play.

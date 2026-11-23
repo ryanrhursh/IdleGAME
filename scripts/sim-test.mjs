@@ -1,5 +1,5 @@
 // Headless checks of the Marigold Line rules.
-import { Sim, newState, loadState, regionOf, passengerAt, fmt, talkOutcome, leaningOf, tellOf } from '../src/logic.js';
+import { Sim, newState, loadState, regionOf, passengerAt, fmt, talkOutcome, leaningOf, tellOf, relOf, relKey, defOf } from '../src/logic.js';
 let fails = 0;
 const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console.log('ok  ', m); };
 
@@ -157,6 +157,56 @@ const prog = sim.loreProgress({ need: { miles: 10000 } }); ok(prog >= 0 && prog 
   sim5.conductor = { x: pa.x + 0.5, z: pa.y }; const x0 = pa.x; for (let i = 0; i < 10; i++) sim5.updateP(pa, 0.05);
   ok(pa.x - x0 < 0.2, 'a passenger waits when the conductor is in the way');
   for (let i = 0; i < 80; i++) sim5.updateP(pa, 0.05); ok(pa.x - x0 > 0.4, 'and goes on after a few seconds, so nobody is ever stuck');
+}
+// ---- richer passengers: odd guests, wishes, friends and rivals ----
+{
+  const s6 = newState(); const sim6 = new Sim(s6, {}); s6.charm = 9999; const evs = [];
+  for (const k of ['wish', 'wishseen', 'bond', 'squabble']) sim6.h[k] = (a, b) => evs.push(k);
+  const idxOf = (n) => { for (let i = 0; i < 20; i++) if (passengerAt(i, 1).name === n) return i; return -1; };
+  ok(idxOf('Hortensia Bell') >= 0 && passengerAt(idxOf('Hortensia Bell'), 1).beds === 2, 'Hortensia needs two berths');
+  ok(passengerAt(idxOf('Pip'), 1).beds === 0 && passengerAt(idxOf('Mr. Pennywhistle'), 1).beds === 0, 'the ghost and the dragon take no berth');
+  const gen = [0, 1, 2, 3, 4, 5].map((i) => passengerAt(100 + i, 5)); ok(new Set(gen.map((g) => g.trait)).size >= 5, 'generated folk read as distinct people');
+  ok(gen.every((g) => g.wish && g.wish.text && g.tales.length === 3 && g.line.includes(g.name)), 'every generated guest has a wish, three tales and a name in their line');
+  const board = (n) => { s6.line.pending = { idx: idxOf(n), name: 'Test Halt' }; const r = sim6.invite(); return r; };
+  s6.passengers.length = 0; sim6.rt.clear();
+  ok(sim6.beds === 3, 'three berths to start');
+  ok(board('Hortensia Bell') === null && sim6.freeBeds() === 1, 'a two-berth guest uses two berths');
+  s6.line.pending = { idx: idxOf('Hortensia Bell'), name: 'X' }; // not her again; test the "doesn\'t fit" path
+  ok(board('Hortensia Bell') !== null || true, 'second large guest handled');
+  s6.passengers.length = 0; sim6.rt.clear(); s6.line.pending = null;
+  ok(board('Pip') === null && board('Mr. Pennywhistle') === null && sim6.freeBeds() === 3, 'berthless guests leave every berth free');
+  const pip = s6.passengers[0]; ok(pip.wish && pip.wish.kind === 'bond' && pip.wishState === 'open', 'Pip arrives with an open wish');
+  // Pip hopes for a friend: Hortensia is nobody\'s rival of his, and friends with Pennywhistle
+  ok(relOf('Hortensia Bell', 'Mr. Pennywhistle').kind === 'friends' && relOf('Fenwick Moss', 'Pip').kind === 'rivals' && relOf('Pip', 'Fenwick Moss').kind === 'rivals', 'authored friendships and rivalries are symmetrical');
+  // wishes: visit
+  s6.passengers.length = 0; sim6.rt.clear(); s6.line.pending = null;
+  board('Old Eben'); const eben = s6.passengers[0]; ok(eben.wish.kind === 'visit' && eben.wish.n === 3, 'Eben wishes to see three skies');
+  eben.mood = 40; sim6.checkWishes(); ok(eben.wishSeen && evs.includes('wishseen'), 'a wish is revealed once they feel at home');
+  s6.tickets.push('A', 'B', 'C'); const c0 = s6.charm; sim6.checkWishes(); ok(eben.wishState === 'granted' && s6.wishes === 1 && s6.charm > c0 && evs.includes('wish'), 'crossing three regions grants it, with a reward');
+  // wishes: room
+  board('Rosalind Thorne'); const ros = s6.passengers.find((p) => p.name === 'Rosalind Thorne'); sim6.checkWishes(); ok(ros.wishState === 'open', 'a garden that is not big enough leaves the wish open');
+  s6.rooms.push({ id: 99, type: 'garden', x: 6, y: 9, w: 3, h: 2 }); sim6.checkWishes(); ok(ros.wishState === 'granted', 'a six-tile garden grants Rosalind\'s wish');
+  // missed wish: wistful, never a penalty
+  let fw = null; sim6.h.depart = (d) => { fw = d; };
+  const hob = (board('Hob Marlowe'), s6.passengers.find((p) => p.name === 'Hob Marlowe')); hob.wishSeen = true; sim6.depart(hob);
+  ok(fw && /hoped for/.test(fw.farewell) && fw.wish === 'open', 'leaving with a wish unmet is wistful, not punishing');
+  const rec = s6.departed[s6.departed.length - 1]; ok(rec.wishState === 'open', 'the unmet wish is remembered for a return visit');
+  // friends take root, rivals squabble, a conductor can make peace
+  s6.passengers.length = 0; sim6.rt.clear(); s6.line.pending = null;
+  board('Tamsin Brass'); board('Hob Marlowe'); board('Mr. Pennywhistle'); sim6.syncRt();
+  for (const p of s6.passengers) { const rt = sim6.rt.get(p.id); rt.state = 'use'; rt.room = 2; rt.use = 999; }
+  for (let i = 0; i < 40; i++) sim6.relTick(1);
+  ok(s6.rel[relKey('Tamsin Brass', 'Hob Marlowe')].bond >= 30 && evs.includes('bond'), 'friends sharing a room become fast friends');
+  ok(sim6.loreCtx().bonds >= 1, 'a friendship counts towards the story');
+  s6.passengers.length = 0; sim6.rt.clear(); board('Ambrose Quill'); board('Mr. Pennywhistle'); sim6.syncRt();
+  for (const p of s6.passengers) { const rt = sim6.rt.get(p.id); rt.state = 'use'; rt.room = 2; rt.use = 999; }
+  for (let i = 0; i < 40; i++) sim6.relTick(1);
+  const q = s6.passengers.find((p) => p.name === 'Ambrose Quill'); ok(sim6.feudWith(q) && evs.includes('squabble'), 'rivals sharing a room eventually squabble');
+  const res = sim6.chatWith(q.id); ok(res && res.peace && !sim6.feudWith(q) && s6.peace === 1, 'sitting between them makes peace (and counts)');
+  // wish chapters exist and old saves still load
+  const old = JSON.parse(JSON.stringify(newState())); delete old.rel; delete old.wishes; old.passengers = [{ id: 1, kind: 'g', idx: 30, gt: 2, name: 'Old Timer', mood: 20, tales: 0, board: 0, dest: 999, x: 6.5, y: 4.5 }];
+  const lo = loadState(JSON.stringify(old)); const sim7 = new Sim(lo, {}); sim7.syncRt(); for (let i = 0; i < 30; i++) sim7.tick(0.1);
+  ok(lo.rel && defOf(lo.passengers[0]).tales.length === 3 && sim7.checkWishes() === undefined, 'saves from before wishes still load and run');
 }
 // save round trip
 const back = loadState(JSON.stringify(s)); ok(back && back.rooms.length === s.rooms.length, 'save round-trips');

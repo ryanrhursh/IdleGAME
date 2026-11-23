@@ -258,7 +258,7 @@ export class InsideView {
   }
   emote(pid, kind) {
     const f = this.figures.get(pid); if (!f) return;
-    const sp = glowSprite(kind === 'heart' ? 0xff7aa8 : 0xffe08a, 0.55, 1); sp.position.set(f.position.x, 1.1, f.position.z); sp.userData = { vy: 0.7, life: 1.4 }; this.sparkGroup.add(sp); this.sparks.push(sp);
+    const sp = glowSprite(kind === 'heart' ? 0xff7aa8 : kind === 'spark' ? 0xff8a4a : 0xffe08a, 0.55, 1); sp.position.set(f.position.x, 1.1, f.position.z); sp.userData = { vy: 0.7, life: 1.4 }; this.sparkGroup.add(sp); this.sparks.push(sp);
   }
   setSelected(room) { this.selRoom = room; this.updateSel(); }
   updateSel() {
