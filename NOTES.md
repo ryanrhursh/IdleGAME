@@ -3,6 +3,7 @@
 ## Latest: smoother walking in Journey
 - Phones now get the joystick **and** tap-to-walk together by default (Menu > Walking cycles stick + tap / tap only / stick only; desktop stays tap-only).
 - Tap-to-walk takes smooth straight legs instead of tile-to-tile zigzags, turns toward the goal quickly before moving, stops and interacts as soon as you are in reach of the person or thing, and waits and re-routes if a passenger is in the way instead of giving up.
+- Turning: touch drag-look is ~24% slower and glides to its target; tap-walk turns ease round (max ~140°/s) instead of snapping. Mouse look is unchanged.
 - Walking speed 1.9 to 2.3 then down to 1.6, view widened (FOV 74 to 80 landscape, 92 on tall phone screens), stoke bar moves aside for the stick, joystick dead zone, and a looser tap threshold for fingers (16 px, 600 ms).
 
 ## Latest: the look (storybook polish)

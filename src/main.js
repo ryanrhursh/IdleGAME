@@ -482,7 +482,7 @@ canvas.addEventListener('pointerdown', (e) => {
 canvas.addEventListener('pointermove', (e) => {
   if (!ptr || ptr.id !== e.pointerId) return;
   if (Math.hypot(e.clientX - ptr.x, e.clientY - ptr.y) > (e.pointerType === 'touch' ? 16 : 9)) ptr.moved = true;
-  if (view === 'journey') { if (ptr.moved && !journey.locked) journey.turn(e.clientX - ptr.lx, e.clientY - ptr.ly); ptr.lx = e.clientX; ptr.ly = e.clientY; return; }
+  if (view === 'journey') { if (ptr.moved && !journey.locked) journey.turn(e.clientX - ptr.lx, e.clientY - ptr.ly, 1, e.pointerType !== 'mouse'); ptr.lx = e.clientX; ptr.ly = e.clientY; return; }
   if (drawing && view === 'inside') updateDraw(e.clientX, e.clientY);
 });
 canvas.addEventListener('pointerup', (e) => {

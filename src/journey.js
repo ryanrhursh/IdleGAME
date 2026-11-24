@@ -144,7 +144,12 @@ export class Journey {
     if (!ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.1), hit)) return null;
     return { x: Math.floor(hit.x), z: Math.floor(hit.z) };
   }
-  turn(dx, dy, k = 1) { const f = k * this.sens; this.yaw -= dx * 0.0055 * f; this.pitch = clamp(this.pitch - dy * 0.0045 * f, -1.1, 1.1); }
+  // dragging with a finger is smoothed: the drag sets where you want to look, and the view glides there instead of following every jitter
+  turn(dx, dy, k = 1, smooth = false) {
+    const f = k * this.sens, ay = -dx * 0.0042 * f, ap = -dy * 0.0034 * f;
+    if (smooth) { this.pendYaw = (this.pendYaw || 0) + ay; this.pendPitch = (this.pendPitch || 0) + ap; return; }
+    this.yaw += ay * 1.3; this.pitch = clamp(this.pitch + ap * 1.3, -1.1, 1.1);
+  }
 
   update(dt, time) {
     if (!this.active) return;
@@ -160,7 +165,7 @@ export class Journey {
       const t = this.path[0], dx = t.x - this.x, dz = t.z - this.z, d = Math.hypot(dx, dz);
       if (d < 0.12) { this.path.shift(); if (!this.path.length && this.goal) { const g = this.goal; this.goal = null; if (Math.hypot(g.it.x - this.x, g.it.z - this.z) < REACH + 0.3) this.interact(g); } }
       else { const want = Math.atan2(-dx, -dz); let dy = ((want - this.yaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
-        this.yaw += clamp(dy, -7 * dt, 7 * dt);                                    // turn first, quickly, then walk where you look
+        this.yaw += clamp(dy * Math.min(1, dt * 5), -2.4 * dt, 2.4 * dt);            // ease round toward where you are going, gently, then walk
         const st = Math.min(SPEED * dt, d) * clamp(1.15 - Math.abs(dy) / 0.9, 0.15, 1); mx = (dx / d) * st; mz = (dz / d) * st; }
     }
     let moved = false;
@@ -183,6 +188,11 @@ export class Journey {
       const r = this.world.canvas.getBoundingClientRect(), nx = (this.mouse.x - r.left - r.width / 2) / (r.width / 2), ny = (this.mouse.y - r.top - r.height / 2) / (r.height / 2);
       if (Math.abs(nx) > 0.25) this.yaw -= Math.sign(nx) * ((Math.abs(nx) - 0.25) / 0.75) * 1.9 * 0.7 * this.sens * dt;
       this.pitch += (clamp(-ny * 0.75, -1, 1) - this.pitch) * Math.min(1, dt * 4);
+    }
+    // glide the dragged look toward its target
+    if (this.pendYaw || this.pendPitch) {
+      const a = 1 - Math.exp(-dt * 11), dyw = (this.pendYaw || 0) * a, dp = (this.pendPitch || 0) * a;
+      this.yaw += dyw; this.pitch = clamp(this.pitch + dp, -1.1, 1.1); this.pendYaw -= dyw; this.pendPitch -= dp; if (Math.abs(this.pendYaw) < 1e-4) this.pendYaw = 0; if (Math.abs(this.pendPitch) < 1e-4) this.pendPitch = 0;
     }
     // the camera
     const cam = this.world.inside.jcam;
