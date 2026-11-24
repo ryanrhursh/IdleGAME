@@ -346,6 +346,8 @@ function renderBook(flip) {
   if (pv) pv.onclick = () => { if (bookTab === 'chapters') bookIdx--; else folkIdx--; audio.pop(); renderBook(true); };
   if (nx) nx.onclick = () => { if (bookTab === 'chapters') bookIdx++; else folkIdx++; audio.pop(); renderBook(true); };
 }
+const BUILD_TIME = typeof __BUILD_TIME__ === 'undefined' ? '' : __BUILD_TIME__;
+function buildStamp() { if (!BUILD_TIME) return 'unknown (dev build)'; const d = new Date(BUILD_TIME); return isNaN(d) ? BUILD_TIME : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + ' (' + d.toISOString().slice(0, 16).replace('T', ' ') + ' UTC)'; }
 function menuModal() {
   openModal(`<div class="eyebrow">Settings</div><h2>The Marigold Line</h2>
   <div class="row2"><button class="btn ghost" id="snd">Sound: ${audio.enabled ? 'on' : 'off'}</button><button class="btn ghost" id="rc">Recentre the view</button></div>
@@ -357,7 +359,7 @@ function menuModal() {
   <div class="row2"><button class="btn ghost" id="auto">While I'm away, welcome travellers: ${state.auto ? 'yes' : 'no'}</button></div>
   <div><small style="color:var(--muted)">Name your train</small><input type="text" id="tn" maxlength="24" value="${esc(state.name)}" placeholder="The Marigold"></div>
   <div class="row2"><button class="btn ghost sm" id="exp">Copy save code</button><button class="btn ghost sm" id="imp">Load save code</button><button class="btn ghost sm" id="rst">Start over</button></div>
-  <div id="io"></div><div class="row2"><button class="btn" id="x">Done</button></div>`);
+  <div id="io"></div><p class="buildstamp" style="color:var(--muted);font-size:12px;text-align:center;margin:4px 0" title="${esc(BUILD_TIME)}">Updated ${esc(buildStamp())}</p><div class="row2"><button class="btn" id="x">Done</button></div>`);
   $('x').onclick = closeModal;
   $('snd').onclick = (e) => { audio.enabled = !audio.enabled; state.sound = audio.enabled; audio.apply(); e.target.textContent = 'Sound: ' + (audio.enabled ? 'on' : 'off'); };
   $('rc').onclick = () => { world.line.recentre(world.aspect); world.inside.fit(world.aspect); closeModal(); };

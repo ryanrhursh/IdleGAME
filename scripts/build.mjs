@@ -3,7 +3,7 @@ import esbuild from 'esbuild';
 import fs from 'node:fs';
 
 const result = await esbuild.build({
-  entryPoints: ['src/main.js'], bundle: true, minify: true, format: 'iife', write: false, target: 'es2020', legalComments: 'none',
+  entryPoints: ['src/main.js'], bundle: true, minify: true, define: { __BUILD_TIME__: JSON.stringify(new Date().toISOString()) }, format: 'iife', write: false, target: 'es2020', legalComments: 'none',
 });
 const js = result.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
 const base = fs.readFileSync('src/index.html', 'utf8').replace('<!--BUNDLE-->', () => `<script>${js}</script>`);
