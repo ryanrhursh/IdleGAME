@@ -7,6 +7,7 @@ import { LOOK } from './look.js';
 import { toon, basic, glowSprite, mesh, G, box, cyl, sph, cone, makeFigure, gearGeometry, toonGradient } from './gfx.js';
 
 const FLOOR_H = 0.1;
+const FURN = 0.7;   // in first person, furniture and duty props are drawn at this fraction of their top-down size (footprints stay put)
 const STYLES = [[1, 1, 1], [1.25, 1.0, 0.8], [0.8, 1.0, 1.3], [1.3, 0.8, 1.1]];
 
 function stitchTexture() {
@@ -209,12 +210,13 @@ export class InsideView {
     // furniture
     const alive = new Set();
     for (const r of s.rooms) {
-      const key = `${r.id}:${r.type}:${r.w}x${r.h}:${r.lv || 0}`; alive.add(r.id);
+      const key = `${r.id}:${r.type}:${r.w}x${r.h}:${r.lv || 0}${this.journey ? ':j' : ''}`; alive.add(r.id);
       const old = this.propGroups.get(r.id);
       if (old && old.userData.key === key) continue;
       if (old) { this.scene.remove(old); this.propGroups.delete(r.id); }
       const grp = new THREE.Group(); grp.userData.key = key; grp.position.set(r.x, FLOOR_H, r.y);
-      const R = rng(hash(key)); BUILDERS[r.type](grp, r.w, r.h, R);
+      const R = rng(hash(key.replace(':j', ''))); BUILDERS[r.type](grp, r.w, r.h, R);
+      if (this.journey) for (const c of grp.children) { c.scale.multiplyScalar(FURN); c.position.y *= FURN; }
       const lv = Math.min(r.lv || 0, 8);
       for (let k = 0; k < lv * 2; k++) { const gl = glowSprite(k % 2 ? 0xffd890 : 0xff9ac0, 0.5, 0.9); gl.position.set(((k + 0.5) / (lv * 2)) * r.w, 0.62 + (k % 2) * 0.05, 0.06); grp.add(gl); grp.add(sph(0xfff0b0, ((k + 0.5) / (lv * 2)) * r.w, 0.6 + (k % 2) * 0.05, 0.06, 0.07, 0.07, 0.07, { emissive: 0xffe0a0, emissiveIntensity: 1.6 })); }
       if (r.born && Date.now() - r.born < 3000) grp.userData.born = performance.now();
@@ -271,16 +273,16 @@ export class InsideView {
     const c = d.post; const con = new THREE.Group(); con.position.set(c.x, FLOOR_H, c.z);
     con.add(box(0x4a3020, 0, 0.22, 0, 0.5, 0.44, 0.4)); con.add(box(0x6a4a30, 0, 0.46, 0, 0.56, 0.04, 0.46)); const dial = cyl(brass, 0, 0.62, 0, 0.2, 0.05, 0.2, { emissive: 0x2a1a04 }); dial.rotation.x = Math.PI / 2 - 0.5; con.add(dial); con.add(sph(0xff6a3a, 0.16, 0.54, 0.12, 0.07, 0.07, 0.07, { emissive: 0xff4a1a, emissiveIntensity: 1.2 }));
     con.add(sph(0xc8a070, -0.2, 0.52, 0.1, 0.18, 0.16, 0.14)); con.add(box(0xe8d8b8, -0.2, 0.62, 0.1, 0.1, 0.02, 0.06)); // the post bag
-    const gl = glowSprite(0xffc070, 1.6, 0.8); gl.position.set(0, 0.7, 0); con.add(gl); this.jprops.add(con);
-    for (const u of d.urns) { const g = new THREE.Group(); g.position.set(u.x, FLOOR_H, u.z); g.add(cyl(brass, 0, 0.2, 0, 0.22, 0.4, 0.22, { emissive: 0x2a1a04 })); g.add(sph(brass, 0, 0.42, 0, 0.2, 0.14, 0.2, { emissive: 0x2a1a04 })); g.add(cyl(brass, 0.14, 0.26, 0, 0.05, 0.05, 0.05)); const st = glowSprite(0xfff4e0, 0.7, 0.6); st.position.set(0, 0.62, 0); g.add(st); this.jprops.add(g); }
+    const gl = glowSprite(0xffc070, 1.6, 0.8); gl.position.set(0, 0.7, 0); con.add(gl); con.scale.setScalar(0.8); this.jprops.add(con);
+    for (const u of d.urns) { const g = new THREE.Group(); g.position.set(u.x, FLOOR_H, u.z); g.add(cyl(brass, 0, 0.2, 0, 0.22, 0.4, 0.22, { emissive: 0x2a1a04 })); g.add(sph(brass, 0, 0.42, 0, 0.2, 0.14, 0.2, { emissive: 0x2a1a04 })); g.add(cyl(brass, 0.14, 0.26, 0, 0.05, 0.05, 0.05)); const st = glowSprite(0xfff4e0, 0.7, 0.6); st.position.set(0, 0.62, 0); g.add(st); g.scale.setScalar(0.8); this.jprops.add(g); }
     for (const m of d.spots) {
       const g = new THREE.Group(); g.position.set(m.x, FLOOR_H, m.z);
       if (m.kind === 'water') { if (m.done) continue; g.add(cyl(0xb8603a, 0, 0.07, 0, 0.14, 0.14, 0.14)); g.add(sph(0x7a8a4a, 0.02, 0.2, 0, 0.17, 0.12, 0.17)); g.add(sph(0x6a7a3a, -0.07, 0.15, 0.03, 0.09, 0.07, 0.09)); const dp = glowSprite(0x8ad0ff, 0.2, 0.7); dp.position.set(0, 0.38, 0); g.add(dp); }
       else if (m.kind === 'lamps') { g.position.y = FLOOR_H + 0.55; g.add(box(0x3a2a20, 0, 0, 0, 0.12, 0.2, 0.1)); g.add(sph(m.done ? 0xfff0b0 : 0x4a4a52, 0, 0.12, 0, 0.12, 0.12, 0.12, m.done ? { emissive: 0xffe0a0, emissiveIntensity: 1.6 } : undefined)); if (m.done) { const gl = glowSprite(0xffd890, 0.9, 0.9); gl.position.set(0, 0.12, 0); g.add(gl); } }
       else { if (m.done) continue; g.add(sph(0xf4ecd8, 0, 0.05, 0, 0.12, 0.08, 0.12)); g.add(cyl(0xe8d8b8, 0.09, 0.03, 0.05, 0.08, 0.06, 0.08)); }
-      this.jprops.add(g);
+      g.scale.setScalar(0.8); this.jprops.add(g);
     }
-    for (const u of d.pickups || []) { const g = new THREE.Group(); g.position.set(u.x, FLOOR_H, u.z); g.add(box(0x6a4a30, 0, 0.12, 0, 0.3, 0.24, 0.26)); g.add(box(0x8a5a38, 0, 0.25, 0, 0.34, 0.03, 0.3)); g.add(box(/book|music/.test(u.item) ? 0xb84a1c : 0xd8a868, 0, 0.29, 0, 0.14, 0.05, 0.1)); const gl = glowSprite(0xffe0a0, 0.7, 0.7); gl.position.set(0, 0.4, 0); g.add(gl); this.jprops.add(g); }
+    for (const u of d.pickups || []) { const g = new THREE.Group(); g.position.set(u.x, FLOOR_H, u.z); g.add(box(0x6a4a30, 0, 0.12, 0, 0.3, 0.24, 0.26)); g.add(box(0x8a5a38, 0, 0.25, 0, 0.34, 0.03, 0.3)); g.add(box(/book|music/.test(u.item) ? 0xb84a1c : 0xd8a868, 0, 0.29, 0, 0.14, 0.05, 0.1)); const gl = glowSprite(0xffe0a0, 0.7, 0.7); gl.position.set(0, 0.4, 0); g.add(gl); g.scale.setScalar(0.8); this.jprops.add(g); }
     this.windowViews = new Set();
     for (const w of d.windows || []) {
       this.windowViews.add(w.view); const tex = w.view === 'A' ? this.winTexA : this.winTexB;
