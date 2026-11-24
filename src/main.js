@@ -549,7 +549,7 @@ function updateHud(dt, time) {
     if (!el) { el = document.createElement('div'); el.className = 'ptag'; labels.appendChild(el); tagLabels.set(p.id, el); }
     el.textContent = firstOf(p.name);
     if (!showTags || (view === 'journey' && Math.hypot(p.x - journey.x, p.y - journey.z) > 5)) { el.style.display = 'none'; continue; }
-    const q = world.project(p.x, view === 'journey' ? 0.95 : 1.35, p.y); el.style.display = q.ok ? '' : 'none'; el.style.left = q.x + 'px'; el.style.top = q.y + 'px';
+    const q = world.project(p.x, view === 'journey' ? 0.7 : 1.35, p.y); el.style.display = q.ok ? '' : 'none'; el.style.left = q.x + 'px'; el.style.top = q.y + 'px';
   }
   for (const [id, el] of tagLabels) if (!state.passengers.some((p) => p.id === id)) { el.remove(); tagLabels.delete(id); }
   // soft train sound

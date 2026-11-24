@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { ROOMS } from './data.js';
-import { GW, GH, rng, hash, clamp } from './logic.js';
+import { GW, GH, rng, hash, clamp, JSCALE } from './logic.js';
 import { LOOK } from './look.js';
 import { toon, basic, glowSprite, mesh, G, box, cyl, sph, cone, makeFigure, gearGeometry, toonGradient } from './gfx.js';
 
@@ -261,7 +261,7 @@ export class InsideView {
   }
   reach() { this.reachT = 0.32; }
   setJourney(on) {
-    this.journey = on; this.handsGroup.visible = on; if (!on) this.setHeld(null); this.built = -1; this.ceiling.visible = on; this.lamps.visible = on; this.jprops.visible = on;
+    this.journey = on; this.handsGroup.visible = on; this.handsGroup.scale.setScalar(0.8); if (!on) this.setHeld(null); this.built = -1; this.ceiling.visible = on; this.lamps.visible = on; this.jprops.visible = on;
     this.gridLines.visible = !on; if (on) { this.sel.visible = false; this.ghost.visible = false; }
   }
   // Things you can use in person: the conductor's post, the tea urns, and anything left lying about.
@@ -347,6 +347,7 @@ export class InsideView {
     for (const pa of sim.s.passengers) {
       seen.add(pa.id);
       let f = this.figures.get(pa.id); if (!f) { f = makeFigure(pa.id * 7 + (pa.idx || 0) * 3); f.scale.setScalar(0.72); this.scene.add(f); this.figures.set(pa.id, f); f.userData.ph = Math.random() * 6; }
+      f.scale.setScalar(this.journey ? 0.72 / JSCALE : 0.72);
       const rt = sim.rt.get(pa.id), walking = rt && rt.state === 'walk';
       f.userData.ph += dt * (walking ? 11 : 2.2);
       f.position.set(pa.x, FLOOR_H + (walking ? Math.abs(Math.sin(f.userData.ph)) * 0.05 : Math.sin(f.userData.ph) * 0.012), pa.y);

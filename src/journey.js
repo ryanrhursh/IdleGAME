@@ -1,8 +1,8 @@
 // Journey mode: walk the Marigold as the conductor, in first person.
 import * as THREE from 'three';
-import { clamp, SPOT_JOBS, firstOf } from './logic.js';
+import { clamp, SPOT_JOBS, firstOf, JSCALE } from './logic.js';
 
-const EYE = 0.6, SPEED = 1.2, REACH = 1.45;
+const EYE = 0.6 / JSCALE, SPEED = 1.2, REACH = 1.25;
 
 export class Journey {
   constructor(world, sim, ui) {
@@ -47,7 +47,7 @@ export class Journey {
   // ----- what is here to use -----
   items() {
     const sim = this.sim, s = sim.s, out = [];
-    for (const p of s.passengers) out.push({ kind: 'pax', id: p.id, x: p.x, z: p.y, y: 0.62, name: p.name });
+    for (const p of s.passengers) out.push({ kind: 'pax', id: p.id, x: p.x, z: p.y, y: 0.62 / JSCALE, name: p.name });
     const post = sim.post(); out.push({ kind: 'post', x: post.x, z: post.z, y: 0.6 });
     for (const u of sim.urns()) out.push({ kind: 'urn', x: u.x, z: u.z, y: 0.5 });
     for (const j of s.jobs.list) if (SPOT_JOBS[j.kind]) j.data.spots.forEach((m, i) => { if (!m.done) out.push({ kind: 'spot', jobKind: j.kind, i, x: m.x, z: m.z, y: j.kind === 'lamps' ? 0.68 : 0.14 }); });
@@ -95,7 +95,7 @@ export class Journey {
   }
   // gold markers over whatever the current duties point at
   markers() {
-    const sim = this.sim, s = sim.s, carry = sim.carry, out = [], post = sim.post(), pax = (p, y = 1.05) => out.push({ x: p.x, z: p.y, y });
+    const sim = this.sim, s = sim.s, carry = sim.carry, out = [], post = sim.post(), pax = (p, y = 1.05 / JSCALE + 0.1) => out.push({ x: p.x, z: p.y, y });
     for (const j of s.jobs.list) {
       if (j.kind === 'tea') { if (!carry) sim.urns().forEach((u) => out.push({ x: u.x, z: u.z, y: 0.85 })); else s.passengers.filter((p) => !j.data.served.includes(p.id)).forEach((p) => pax(p)); }
       else if (j.kind === 'post') { if (!carry) out.push({ x: post.x, z: post.z, y: 0.95 }); else { const p = s.passengers.find((q) => q.id === j.data.to); if (p) pax(p); } }
@@ -123,7 +123,7 @@ export class Journey {
     if (!p) return false;
     const pts = p.slice(1).map((k) => ({ x: (k % 24) + 0.5, z: Math.floor(k / 24) + 0.5 }));
     // pull the string tight: skip any waypoint we can already walk straight past, so the route is a few smooth legs instead of tile-to-tile zigzags
-    const clear = (ax, az, bx, bz) => { const d = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(d / 0.1)); for (let i = 1; i <= n; i++) if (!sim.canStand(ax + ((bx - ax) * i) / n, az + ((bz - az) * i) / n, 0.2)) return false; return true; };
+    const clear = (ax, az, bx, bz) => { const d = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(d / 0.1)); for (let i = 1; i <= n; i++) if (!sim.canStand(ax + ((bx - ax) * i) / n, az + ((bz - az) * i) / n, 0.14)) return false; return true; };
     const out = []; let cx = this.x, cz = this.z, i = 0;
     while (i < pts.length) { let j = pts.length - 1; while (j > i && !clear(cx, cz, pts[j].x, pts[j].z)) j--; out.push(pts[j]); cx = pts[j].x; cz = pts[j].z; i = j + 1; }
     this.path = out; this.goal = then || null; this.dest = { x: tx, z: tz, then: then || null }; if (!quiet) this.repaths = 0; return true;
@@ -159,7 +159,7 @@ export class Journey {
     if (f || sd) {
       const l = Math.hypot(f, sd) || 1; f /= Math.max(1, l); sd /= Math.max(1, l);
       mx = (-Math.sin(this.yaw) * f + Math.cos(this.yaw) * sd) * SPEED * dt; mz = (-Math.cos(this.yaw) * f - Math.sin(this.yaw) * sd) * SPEED * dt;
-    } else if (this.path.length && this.goal && Math.hypot(this.goal.it.x - this.x, this.goal.it.z - this.z) < 0.95) {   // close enough to the person or thing you walked to
+    } else if (this.path.length && this.goal && Math.hypot(this.goal.it.x - this.x, this.goal.it.z - this.z) < 0.8) {   // close enough to the person or thing you walked to
       const g = this.goal; this.goal = null; this.path = []; this.interact(g);
     } else if (this.path.length) {
       const t = this.path[0], dx = t.x - this.x, dz = t.z - this.z, d = Math.hypot(dx, dz);
@@ -172,7 +172,7 @@ export class Journey {
     if (mx || mz) {
       let [nx, nz] = sim.tryMove(this.x, this.z, mx, mz);
       for (const q of sim.s.passengers) {                              // people are solid: slide around them
-        const dx = nx - q.x, dz = nz - q.y, d = Math.hypot(dx, dz), min = 0.36;
+        const dx = nx - q.x, dz = nz - q.y, d = Math.hypot(dx, dz), min = 0.36 / JSCALE;
         if (d < min && d > 1e-4) { const px = nx + (dx / d) * (min - d), pz = nz + (dz / d) * (min - d); if (sim.canStand(px, pz)) { nx = px; nz = pz; } else { nx = this.x; nz = this.z; } }
       }
       if (nx === this.x && nz === this.z && this.path.length && !(f || sd)) {   // something is in the way: wait a beat, then find another way round

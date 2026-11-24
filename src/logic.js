@@ -3,6 +3,8 @@ import { ROOMS, HOBBY_ROOM, PASSENGERS, GEN_FIRST, GEN_LAST, GEN_TYPES, REGION_A
 
 export const GW = 24, GH = 16;
 export const BASE_SPEED = 0.12; // miles per second at idle pressure
+// In first person the people (and the conductor) are drawn this much smaller, so the rooms, corridors and ceilings feel that much bigger.
+export const JSCALE = 1.45;
 export const KINDS = 6; // scenery prop kinds
 
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -273,7 +275,7 @@ export class Sim {
   }
 
   // ---------- journey mode: walking the train as the conductor ----------
-  canStand(x, z, r = 0.17) {
+  canStand(x, z, r = this.journey ? 0.17 / JSCALE : 0.17) {
     const cx = Math.floor(x), cz = Math.floor(z), ck = key(cx, cz);
     if (!this.tile.has(ck)) return false;
     const rid = this.tile.get(ck), nb = this.neighbors(ck);
