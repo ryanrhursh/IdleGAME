@@ -275,6 +275,7 @@ export class InsideView {
     con.add(box(0x4a3020, 0, 0.22, 0, 0.5, 0.44, 0.4)); con.add(box(0x6a4a30, 0, 0.46, 0, 0.56, 0.04, 0.46)); const dial = cyl(brass, 0, 0.62, 0, 0.2, 0.05, 0.2, { emissive: 0x2a1a04 }); dial.rotation.x = Math.PI / 2 - 0.5; con.add(dial); con.add(sph(0xff6a3a, 0.16, 0.54, 0.12, 0.07, 0.07, 0.07, { emissive: 0xff4a1a, emissiveIntensity: 1.2 }));
     con.add(sph(0xc8a070, -0.2, 0.52, 0.1, 0.18, 0.16, 0.14)); con.add(box(0xe8d8b8, -0.2, 0.62, 0.1, 0.1, 0.02, 0.06)); // the post bag
     const gl = glowSprite(0xffc070, 1.6, 0.8); gl.position.set(0, 0.7, 0); con.add(gl); con.scale.setScalar(0.8); this.jprops.add(con);
+    for (const bl of d.bells || []) { const g = new THREE.Group(); g.position.set(bl.x, FLOOR_H, bl.z); g.add(cyl(0x5a3a22, 0, 0.3, 0, 0.06, 0.6, 0.06)); g.add(box(0x5a3a22, 0, 0.6, 0, 0.3, 0.05, 0.05)); const bell = cone(brass, 0, 0.5, 0, 0.2, 0.22, 0.2, { emissive: 0x2a1a04 }); g.add(bell); g.add(sph(0x3a2a14, 0, 0.38, 0, 0.05, 0.05, 0.05)); g.scale.setScalar(0.8); this.jprops.add(g); }
     for (const u of d.urns) { const g = new THREE.Group(); g.position.set(u.x, FLOOR_H, u.z); g.add(cyl(brass, 0, 0.2, 0, 0.22, 0.4, 0.22, { emissive: 0x2a1a04 })); g.add(sph(brass, 0, 0.42, 0, 0.2, 0.14, 0.2, { emissive: 0x2a1a04 })); g.add(cyl(brass, 0.14, 0.26, 0, 0.05, 0.05, 0.05)); const st = glowSprite(0xfff4e0, 0.7, 0.6); st.position.set(0, 0.62, 0); g.add(st); g.scale.setScalar(0.8); this.jprops.add(g); }
     for (const m of d.spots) {
       const g = new THREE.Group(); g.position.set(m.x, FLOOR_H, m.z);

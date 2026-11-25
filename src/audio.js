@@ -77,6 +77,7 @@ export class Audio {
     };
     this.ambT = EV[type] ? EV[type]() : 3 + r * 4;
   }
+  bell() { [0, 1, 2, 3].forEach((i) => setTimeout(() => { this.tone(880, 1.6, 0.07, 'sine'); this.tone(1318, 1.2, 0.04, 'sine'); this.tone(2217, 0.8, 0.025, 'triangle'); }, i * 420)); }
   moment(type) {
     if (type === 'music') [0, 2, 4, 7, 4].forEach((s, i) => setTimeout(() => this.note(2 + s, 0.55), i * 220));
     else if (type === 'aquarium' || type === 'bath') [0, 1, 2].forEach((i) => setTimeout(() => this.tone(520 + i * 160, 0.12, 0.05, 'sine', 900), i * 130));

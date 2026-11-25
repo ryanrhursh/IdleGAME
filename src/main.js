@@ -118,6 +118,8 @@ hooks.wishseen = (p, w) => { toast(`<b>${esc(firstOf(p.name))}</b> confides a ho
 hooks.wish = (p, w) => { showSlip('\u2726 A wish came true', p.name, () => passengerModal(p)); audio.chord(); };
 hooks.bond = (a, b, t) => { toast(`<i>${esc(t)}</i>`); audio.note(10, 0.4); badge('bPeople', true); };
 hooks.squabble = (a, b, t) => { toast(`<i>${esc(t)}</i>${view === 'journey' ? ' Go and sit between them.' : ''}`); audio.note(3, 0.3); };
+hooks.bell = () => { toast('<i>The dinner bell rings. Everyone is heading for the dining car.</i>'); };
+hooks.dinner = ({ n, gain }) => { toast(n ? `Dinner is over. <b>${n}</b> ${n === 1 ? 'traveller' : 'travellers'} shared it. +${fmt(gain)} Charm.` : 'Dinner is over. Nobody made it to the table, but the soup was lovely.'); audio.chord(); };
 hooks.letter = (c) => { showSlip('\u2709 A letter has come', 'from ' + c.from.split(' ')[0], () => bookModal(null, 'postcards')); badge('bBook', true); audio.note(8, 0.5); };
 hooks.lore = (e) => { if (e.id !== 'start') { showPageNote(e); badge('bBook', true); audio.note(11, 0.45); } };
 

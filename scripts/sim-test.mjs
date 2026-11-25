@@ -218,6 +218,20 @@ const prog = sim.loreProgress({ need: { miles: 10000 } }); ok(prog >= 0 && prog 
   ok(sim8.doMoment(90) === null && !sim8.momentReady(90), 'the same moment needs a rest before it can be repeated');
   ok(sim8.momentReady(91) && sim8.doMoment(91) && s8.moments === 2 && sim8.loreCtx().moments === 2, 'a different room is still ready, and moments count towards the story');
 }
+// ---- the dinner bell ----
+{
+  const s9 = newState(); const sim9 = new Sim(s9, {}); s9.charm = 500; const evs = []; sim9.h.dinner = (d) => evs.push(d); sim9.h.bell = () => evs.push('bell');
+  ok(!sim9.bellReady(), 'no bell is rung for an empty train');
+  for (let k = 0; k < 3; k++) { s9.line.pending = { idx: k, name: 'T' }; sim9.invite(); }
+  sim9.syncRt(); for (const p of s9.passengers) { p.x = 6.5; p.y = 4.5; }
+  ok(sim9.bells().length === 1 && sim9.bellReady(), 'a dining car has a bell and it is ready');
+  const msg = sim9.ringBell(sim9.bells()[0].rid); ok(msg && evs.includes('bell') && !sim9.bellReady(), 'ringing it starts dinner');
+  const c0 = s9.charm; s9.line.nextStop = 1e9; s9.line.pending = null; for (let i = 0; i < 360; i++) sim9.tick(0.1);
+  const din = s9.rooms.find((r) => r.type === 'dining'), inDining = s9.passengers.filter((p) => sim9.roomAt(Math.floor(p.x), Math.floor(p.y)) === din).length;
+  ok(evs.some((e) => e && e.n !== undefined) && s9.dinners === 1 && s9.charm > c0, 'dinner ends with a shared-meal reward');
+  ok(inDining >= 1 || evs.some((e) => e && e.n >= 1), `people came to the table (${inDining} in the room, reward for ${(evs.find((e) => e && e.n !== undefined) || {}).n})`);
+  ok(sim9.loreCtx().dinners === 1 && sim9.ringBell(din.id) === null, 'dinners count for the story, and the bell needs a rest');
+}
 // save round trip
 const back = loadState(JSON.stringify(s)); ok(back && back.rooms.length === s.rooms.length, 'save round-trips');
 console.log(fails ? `${fails} FAILED` : 'all passed'); process.exit(fails ? 1 : 0);

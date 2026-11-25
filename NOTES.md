@@ -14,6 +14,7 @@
 ## Latest: five more ideas (each pushed separately)
 1. **Journey sound:** footsteps (soft on rugs, bright on wood), a low train rumble that follows steam, and a gentle ambience per room type (birds in the garden, drips in the bath, bubbles at the aquarium, ticking in the workshop, a note now and then in the music room...). All synthesized in `audio.js`; respects the Sound toggle.
 2. **Room moments:** in Journey, special rooms offer a small optional thing to do when you stand near its feature: feed the fish, play the piano, choose a book, use the telescope, add bath salts, oil the gears, smell the blossoms. Each pays a little Charm and lifts the mood of people in the room (more if it is their favorite room), then needs ~2.5 minutes to rest. New chapter *A Little Time for Oneself*.
+3. **Dinner bell:** every dining car has a brass bell on a post (Journey). Ringing it calls everyone to the table for ~26 s: moods lift, friends bond four times faster, and a shared-meal reward (+12 Charm per person at the table) lands when dinner ends. Rests ~4 minutes. Chapter *Come and Get It*.
 
 ## Earlier: the look (storybook polish)
 - **Inside:** every room now has its own wallpaper tint (instance colours on a striped, flowered, dado-railed wallpaper texture); door posts everywhere and lintels in first person; framed pictures on about a third of the walls in sleepers, dining cars, parlors, corridors and the music room (first person only, never over a window); round rugs under dining tables and a rug and potted plant in sleepers.

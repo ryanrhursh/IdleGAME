@@ -105,7 +105,7 @@ export function newState(now = Date.now()) {
     grid: { x0: 6, y0: 4, x1: 15, y1: 9 },
     rooms: [{ id: 1, type: 'sleeper', x: 6, y: 4, w: 3, h: 3 }, { id: 2, type: 'dining', x: 9, y: 4, w: 4, h: 3 }, { id: 3, type: 'corridor', x: 6, y: 7, w: 10, h: 1 }],
     nextRoom: 4, unlocked: ['sleeper', 'dining', 'parlor', 'corridor'],
-    passengers: [], nextPid: 1, keepsakes: [], postcards: [], tickets: [], plates: [], talesHeard: 0, departed: [], mail: [], returns: 0, lettersGot: 0, wishes: 0, peace: 0, moments: 0, momentAt: {}, rel: {}, mode: 'afk', controls: 'tap', sens: 1, jobs: { list: [], done: 0, nextAt: 0, id: 1 }, lastInput: now, journal: [],
+    passengers: [], nextPid: 1, keepsakes: [], postcards: [], tickets: [], plates: [], talesHeard: 0, departed: [], mail: [], returns: 0, lettersGot: 0, wishes: 0, peace: 0, moments: 0, momentAt: {}, dinners: 0, bellAt: 0, rel: {}, mode: 'afk', controls: 'tap', sens: 1, jobs: { list: [], done: 0, nextAt: 0, id: 1 }, lastInput: now, journal: [],
     line: { seed: Math.floor(Math.random() * 1e9), region: 'M', regionStart: 0, nextStop: 2.5, stopIndex: 0, nextLandmark: 7, forkChosen: null, forkAnnounced: false, pending: null },
     hint: 0, auto: false, sound: true, name: '', paintSeen: false,
   };
@@ -292,6 +292,23 @@ export class Sim {
     let nx = x + dx; if (!this.canStand(nx, z)) nx = x;
     let nz = z + dz; if (!this.canStand(nx, nz)) nz = z;
     return [nx, nz];
+  }
+  // ---- the dinner bell: ring it and everyone comes to the table ----
+  bells() { return this.s.rooms.filter((r) => r.type === 'dining').map((r) => ({ rid: r.id, x: r.x + Math.max(0.5, r.w - 0.45), z: r.y + 0.45 })); }
+  bellReady() { return !this.dinner && this.s.passengers.length > 0 && Date.now() - (this.s.bellAt || 0) > 240000; }
+  ringBell(rid) {
+    if (!this.bellReady() || !this.roomById.get(rid)) return null;
+    this.s.bellAt = Date.now(); this.dinner = { rid, left: 26, n0: 0 };
+    for (const p of this.s.passengers) { const rt = this.rt.get(p.id); if (rt) { rt.state = 'idle'; rt.t = Math.random() * 1.2; } }
+    this.ev('bell', rid); return 'The bell rings through the whole train. Footsteps start up in every corridor.';
+  }
+  finishDinner() {
+    const s = this.s, d = this.dinner; this.dinner = null; if (!d) return;
+    const room = this.roomById.get(d.rid); let n = 0;
+    for (const p of s.passengers) { if (room && this.roomAt(Math.floor(p.x), Math.floor(p.y)) === room) { n++; this.addMood(p, 10); } else this.addMood(p, 3); }
+    const gain = Math.round((12 * n + 10) * this.charmMul); s.charm += gain; s.dinners = (s.dinners || 0) + 1;
+    this.postcard(n ? `Dinner was shared by ${n} ${n === 1 ? 'traveller' : 'travellers'}. The soup was passed twice, and nobody counted.` : 'Dinner was laid, and cooled, and eaten later by whoever wandered past.', 'platform');
+    this.ev('dinner', { n, gain }); this.checkProgress();
   }
   // ---- moments: stand in a special room and do the small thing it invites ----
   momentSpots() {
@@ -494,6 +511,7 @@ export class Sim {
   }
   occupancy(rid) { let n = 0; for (const [, r] of this.rt) if (r.room === rid && (r.state === 'use' || r.state === 'walk')) n++; return n; }
   pickRoom(p) {
+    if (this.dinner) { const dr = this.roomById.get(this.dinner.rid); if (dr) return dr; }
     const d = defOf(p), rooms = this.s.rooms, r = Math.random();
     const want = r < 0.4 ? HOBBY_ROOM[d.hobby] : r < 0.6 ? 'dining' : r < 0.8 ? 'parlor' : 'sleeper';
     const order = [want, HOBBY_ROOM[d.hobby], 'dining', 'parlor', 'sleeper'];
@@ -642,6 +660,7 @@ export class Sim {
     for (const p of s.passengers) this.updateP(p, dt);
     this.t.jobs = (this.t.jobs || 0) + dt; if (this.t.jobs > 2) { this.t.jobs = 0; this.ensureJobs(); }
     this.t.lore += dt; if (this.t.lore > 2) { this.t.lore = 0; this.checkProgress(); this.checkWishes(); }
+    if (this.dinner) { this.dinner.left -= dt; if (this.dinner.left <= 0) this.finishDinner(); }
     this.t.rel = (this.t.rel || 0) + dt; if (this.t.rel > 1) { const k = this.t.rel; this.t.rel = 0; this.relTick(k); }
   }
   // ---- wishes: each person hopes for one thing. Meeting it is a joy; missing it is only a little sad. ----
@@ -672,7 +691,7 @@ export class Sim {
       const a = g[i], b = g[j], rel = relOf(a.name, b.name); if (rel.kind === 'neutral') continue;
       const k = relKey(a.name, b.name), x = s.rel[k] || (s.rel[k] = { bond: 0, tension: 0, feud: false });
       if (rel.kind === 'friends') {
-        const was = x.bond; x.bond = Math.min(100, x.bond + 0.8 * dt); this.addMood(a, 0.25 * dt); this.addMood(b, 0.25 * dt); this.rt.get(a.id).buddy = this.rt.get(b.id).buddy = true;
+        const was = x.bond; x.bond = Math.min(100, x.bond + (this.dinner ? 3.2 : 0.8) * dt); this.addMood(a, 0.25 * dt); this.addMood(b, 0.25 * dt); this.rt.get(a.id).buddy = this.rt.get(b.id).buddy = true;
         if (was < 30 && x.bond >= 30) { const t = FRIEND_LINES[0].replace('{a}', firstOf(a.name)).replace('{b}', firstOf(b.name)).replace('{act}', rel.act); this.postcard(t, 'platform'); this.ev('bond', a, b, t); this.ev('emote', { id: a.id, kind: 'heart' }); this.ev('emote', { id: b.id, kind: 'heart' }); }
       } else {
         x.tension += dt;
@@ -700,7 +719,7 @@ export class Sim {
   }
   loreCtx() {
     const s = this.s;
-    return { miles: s.miles, aboard: s.passengers.length, met: s.metCount, unfolds: s.unfolds, rooms: s.rooms.length, keepsakes: s.keepsakes.length, postcards: s.postcards.length, tickets: s.tickets.length, tales: s.talesHeard || 0, returns: s.returns || 0, letters: s.lettersGot || 0, wishes: s.wishes || 0, moments: s.moments || 0, bonds: Object.values(s.rel || {}).filter((x) => x.bond >= 30).length, peace: s.peace || 0, jobs: (s.jobs && s.jobs.done) || 0, looks: s.looks || 0, levels: s.rooms.reduce((a, r) => a + (r.lv || 0), 0) };
+    return { miles: s.miles, aboard: s.passengers.length, met: s.metCount, unfolds: s.unfolds, rooms: s.rooms.length, keepsakes: s.keepsakes.length, postcards: s.postcards.length, tickets: s.tickets.length, tales: s.talesHeard || 0, returns: s.returns || 0, letters: s.lettersGot || 0, wishes: s.wishes || 0, moments: s.moments || 0, dinners: s.dinners || 0, bonds: Object.values(s.rel || {}).filter((x) => x.bond >= 30).length, peace: s.peace || 0, jobs: (s.jobs && s.jobs.done) || 0, looks: s.looks || 0, levels: s.rooms.reduce((a, r) => a + (r.lv || 0), 0) };
   }
   loreProgress(e) {
     const ks = Object.keys(e.need); if (!ks.length) return 1;
