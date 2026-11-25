@@ -293,6 +293,11 @@ export class Sim {
     let nz = z + dz; if (!this.canStand(nx, nz)) nz = z;
     return [nx, nz];
   }
+  // ---- the keepsake cabinet: whatever travellers leave behind is kept where you can look at it ----
+  shelfSpot() {
+    const rooms = this.s.rooms, r = rooms.find((q) => q.type === 'parlor') || rooms.find((q) => q.type === 'dining') || rooms.find((q) => q.type !== 'corridor' && q.type !== 'sleeper') || rooms[0];
+    return r ? { rid: r.id, x: r.x + r.w / 2, z: r.y + r.h - 0.22 } : null;
+  }
   // ---- the dinner bell: ring it and everyone comes to the table ----
   bells() { return this.s.rooms.filter((r) => r.type === 'dining').map((r) => ({ rid: r.id, x: r.x + Math.max(0.5, r.w - 0.45), z: r.y + 0.45 })); }
   bellReady() { return !this.dinner && this.s.passengers.length > 0 && Date.now() - (this.s.bellAt || 0) > 240000; }

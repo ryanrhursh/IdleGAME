@@ -275,6 +275,18 @@ export class InsideView {
     con.add(box(0x4a3020, 0, 0.22, 0, 0.5, 0.44, 0.4)); con.add(box(0x6a4a30, 0, 0.46, 0, 0.56, 0.04, 0.46)); const dial = cyl(brass, 0, 0.62, 0, 0.2, 0.05, 0.2, { emissive: 0x2a1a04 }); dial.rotation.x = Math.PI / 2 - 0.5; con.add(dial); con.add(sph(0xff6a3a, 0.16, 0.54, 0.12, 0.07, 0.07, 0.07, { emissive: 0xff4a1a, emissiveIntensity: 1.2 }));
     con.add(sph(0xc8a070, -0.2, 0.52, 0.1, 0.18, 0.16, 0.14)); con.add(box(0xe8d8b8, -0.2, 0.62, 0.1, 0.1, 0.02, 0.06)); // the post bag
     const gl = glowSprite(0xffc070, 1.6, 0.8); gl.position.set(0, 0.7, 0); con.add(gl); con.scale.setScalar(0.8); this.jprops.add(con);
+    if (d.shelf) {
+      const sh = d.shelf, g = new THREE.Group(); g.position.set(sh.x, FLOOR_H, sh.z);
+      const wood = 0x6a4a30; g.add(box(wood, -0.46, 0.4, 0, 0.06, 0.8, 0.24)); g.add(box(wood, 0.46, 0.4, 0, 0.06, 0.8, 0.24)); g.add(box(wood, 0, 0.8, 0, 0.98, 0.06, 0.26)); g.add(box(wood, 0, 0.03, 0, 0.98, 0.06, 0.24)); g.add(box(0x9a7a56, 0, 0.4, 0.1, 0.9, 0.78, 0.04));
+      for (const y of [0.28, 0.54]) g.add(box(wood, 0, y, 0, 0.9, 0.03, 0.22));
+      g.add(box(0xbfe6f0, 0, 0.4, -0.12, 0.9, 0.76, 0.02, { transparent: true, opacity: 0.18 }));
+      (d.keeps || []).slice(-12).forEach((name, i) => {
+        let h = 7; for (let c = 0; c < name.length; c++) h = (h * 31 + name.charCodeAt(c)) | 0; h = Math.abs(h);
+        const col = new THREE.Color().setHSL((h % 100) / 100, 0.5, 0.58), x = -0.34 + (i % 4) * 0.23, y = 0.06 + Math.floor(i / 4) * 0.26, k = h % 3;
+        if (k === 0) g.add(sph(col, x, y + 0.11, 0, 0.18, 0.18, 0.18)); else if (k === 1) g.add(cone(col, x, y + 0.12, 0, 0.17, 0.24, 0.17)); else g.add(box(col, x, y + 0.1, 0, 0.17, 0.2, 0.14));
+      });
+      g.scale.setScalar(0.9); this.jprops.add(g);
+    }
     for (const bl of d.bells || []) { const g = new THREE.Group(); g.position.set(bl.x, FLOOR_H, bl.z); g.add(cyl(0x5a3a22, 0, 0.3, 0, 0.06, 0.6, 0.06)); g.add(box(0x5a3a22, 0, 0.6, 0, 0.3, 0.05, 0.05)); const bell = cone(brass, 0, 0.5, 0, 0.2, 0.22, 0.2, { emissive: 0x2a1a04 }); g.add(bell); g.add(sph(0x3a2a14, 0, 0.38, 0, 0.05, 0.05, 0.05)); g.scale.setScalar(0.8); this.jprops.add(g); }
     for (const u of d.urns) { const g = new THREE.Group(); g.position.set(u.x, FLOOR_H, u.z); g.add(cyl(brass, 0, 0.2, 0, 0.22, 0.4, 0.22, { emissive: 0x2a1a04 })); g.add(sph(brass, 0, 0.42, 0, 0.2, 0.14, 0.2, { emissive: 0x2a1a04 })); g.add(cyl(brass, 0.14, 0.26, 0, 0.05, 0.05, 0.05)); const st = glowSprite(0xfff4e0, 0.7, 0.6); st.position.set(0, 0.62, 0); g.add(st); g.scale.setScalar(0.8); this.jprops.add(g); }
     for (const m of d.spots) {

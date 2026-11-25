@@ -52,6 +52,7 @@ export class Journey {
     for (const u of sim.urns()) out.push({ kind: 'urn', x: u.x, z: u.z, y: 0.5 });
     for (const j of s.jobs.list) if (SPOT_JOBS[j.kind]) j.data.spots.forEach((m, i) => { if (!m.done) out.push({ kind: 'spot', jobKind: j.kind, i, x: m.x, z: m.z, y: j.kind === 'lamps' ? 0.68 : 0.14 }); });
     for (const w of sim.windows()) out.push({ kind: 'window', x: w.x, z: w.z, y: 0.84 });
+    { const sh = sim.shelfSpot(); if (sh) out.push({ kind: 'shelf', x: sh.x, z: sh.z, y: 0.5 }); }
     for (const b of sim.bells()) out.push({ kind: 'bell', rid: b.rid, x: b.x, z: b.z, y: 0.5 });
     for (const m of sim.momentSpots()) out.push({ kind: 'moment', rid: m.rid, mtype: m.type, label: m.label, x: m.x, z: m.z, y: 0.45 });
     const fj = s.jobs.list.find((j) => j.kind === 'fetch'); if (fj && !sim.carry) { const u = sim.pickups().find((q) => q.rid === fj.data.rid); if (u) out.push({ kind: 'pick', rid: u.rid, item: u.item, x: u.x, z: u.z, y: 0.4 }); }
@@ -72,6 +73,7 @@ export class Journey {
     if (it.kind === 'spot') return { label: SPOT_JOBS[it.jobKind], act: 'spot' };
     if (it.kind === 'pick') return { label: `Take ${it.item}`, act: 'take' };
     if (it.kind === 'window') return { label: 'Look out of the window', act: 'look' };
+    if (it.kind === 'shelf') return { label: sim.s.keepsakes.length ? `Look at the keepsakes (${sim.s.keepsakes.length})` : 'Look at the cabinet', act: 'shelf' };
     if (it.kind === 'bell') return sim.bellReady() ? { label: 'Ring the dinner bell', act: 'bell' } : null;
     if (it.kind === 'moment') return sim.momentReady(it.rid) ? { label: it.label, act: 'moment' } : null;
     return null;
@@ -88,6 +90,12 @@ export class Journey {
     if (n.act === 'talk') { const c = sim.chatWith(it.id); if (c) { sim.jobEvent('talk', { pid: it.id }); this.ui.speech(it.name, c.text, c.tale); } return true; }
     if (n.act === 'tell') { const r = sim.jobEvent('tell', { pid: it.id }); this.ui.speech(it.name, r || 'Thank you.', false); this.ui.audio.pop(); this.syncProps(true); return true; }
     if (n.act === 'look') { const text = sim.outsideText(); sim.jobEvent('look', { text }); this.ui.speech('Out of the window', text, 'look'); this.ui.audio.pop(); this.syncProps(true); return true; }
+    if (n.act === 'shelf') {
+      const ks = sim.s.keepsakes;
+      if (!ks.length) { this.ui.speech('The keepsake cabinet', 'Empty, for now. When someone steps off at their stop, whatever they leave behind will be kept here, dusted, and never once called clutter.', 'moment'); return true; }
+      this.shelfIdx = ((this.shelfIdx == null ? ks.length : this.shelfIdx) - 1 + ks.length) % ks.length; const k = ks[this.shelfIdx];
+      this.ui.speech(k.name, `Left by ${k.who}. ${k.line}${ks.length > 1 ? ` (${this.shelfIdx + 1} of ${ks.length}. Tap again for another.)` : ''}`, 'moment'); this.ui.audio.pop(); return true;
+    }
     if (n.act === 'bell') { const m = sim.ringBell(it.rid); if (m) { this.ui.audio.bell(); this.ui.speech('The dinner bell', m, 'moment'); this.syncProps(true); } return true; }
     if (n.act === 'moment') { const r = sim.doMoment(it.rid); if (r) { this.ui.audio.moment(r.type); this.ui.speech(r.type === 'music' ? 'The piano' : r.type.charAt(0).toUpperCase() + r.type.slice(1), r.text, 'moment'); } return true; }
     if (n.act === 'serve') msg = sim.jobEvent('serve', { pid: it.id });
@@ -115,12 +123,12 @@ export class Journey {
   }
   syncProps(force) {
     const sim = this.sim, s = sim.s;
-    const key = [sim.version, s.jobs.list.map((j) => j.id + ':' + j.prog + ':' + (j.data && j.data.seen ? 's' : '')).join(','), sim.carry ? sim.carry.kind + (sim.carry.item || '') : '-', s.passengers.length].join('|');
+    const key = [sim.version, s.jobs.list.map((j) => j.id + ':' + j.prog + ':' + (j.data && j.data.seen ? 's' : '')).join(','), sim.carry ? sim.carry.kind + (sim.carry.item || '') : '-', s.passengers.length, s.keepsakes.length].join('|');
     this.world.inside.setHeld(sim.carry);
     if (!force && key === this.propsKey) return; this.propsKey = key;
     const spots = []; for (const j of s.jobs.list) if (SPOT_JOBS[j.kind]) j.data.spots.forEach((m) => spots.push({ ...m, kind: j.kind }));
     const fj = s.jobs.list.find((j) => j.kind === 'fetch'), pickups = fj && !sim.carry ? sim.pickups().filter((u) => u.rid === fj.data.rid) : [];
-    this.world.inside.setJourneyProps({ post: sim.post(), urns: sim.urns(), bells: sim.bells(), spots, pickups, windows: sim.windows(), markers: this.markers() });
+    this.world.inside.setJourneyProps({ shelf: sim.shelfSpot(), keeps: s.keepsakes.map((k) => k.name), post: sim.post(), urns: sim.urns(), bells: sim.bells(), spots, pickups, windows: sim.windows(), markers: this.markers() });
   }
 
   // ----- moving -----
