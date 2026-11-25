@@ -308,6 +308,22 @@ function passengerModal(p) {
 
 // ---------- the storybook ----------
 let bookTab = 'chapters', bookIdx = 0, folkIdx = 0;
+// ---------- photographs: kept on this device only (they would make the save code enormous) ----------
+const PHOTO_KEY = 'marigold.photos.v1'; let photos = [], snapPending = false;
+try { photos = JSON.parse(localStorage.getItem(PHOTO_KEY) || '[]'); if (!Array.isArray(photos)) photos = []; } catch (e) { photos = []; }
+function savePhotos() { for (let i = 0; i < 6; i++) { try { localStorage.setItem(PHOTO_KEY, JSON.stringify(photos)); return; } catch (e) { if (photos.length < 2) return; photos.shift(); } } }
+function takePhoto() {
+  const c = world.canvas, W = 320, H = Math.max(1, Math.round((c.height * W) / c.width)), t = document.createElement('canvas'); t.width = W; t.height = H;
+  let img; try { t.getContext('2d').drawImage(c, 0, 0, W, H); img = t.toDataURL('image/jpeg', 0.72); } catch (e) { toast('The camera would not take that one.'); return; }
+  const rg = sim.region(), rm = view === 'journey' ? sim.roomAt(Math.floor(journey.x), Math.floor(journey.z)) : null;
+  const cap = view === 'journey' ? `${rm ? ROOMS[rm.type].name : 'On board'}, in the ${rg.name}` : view === 'inside' ? 'The Marigold, inside' : `The ${rg.name}`;
+  photos.push({ id: Date.now(), img, cap, mile: Math.round(state.miles) }); if (photos.length > 14) photos.shift(); savePhotos();
+  state.photosTaken = (state.photosTaken || 0) + 1; if (!state.photoRegions) state.photoRegions = [];
+  let bonus = ''; if (!state.photoRegions.includes(rg.name)) { state.photoRegions.push(rg.name); state.charm += 20 * sim.charmMul; bonus = ` A new view: +${Math.round(20 * sim.charmMul)} Charm.`; }
+  const f = $('flash'); f.classList.add('on'); requestAnimationFrame(() => requestAnimationFrame(() => f.classList.remove('on'))); audio.shutter();
+  toast(`Snap! It is in the Book, under <b>Album</b>.${bonus}`); badge('bBook', true); sim.checkProgress();
+}
+$('snap').onclick = () => { snapPending = true; };
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
 function needLine(e) { return Object.entries(e.need).map(([k, v]) => NEED_TEXT[k](v)).join(' and '); }
 function bookModal(openId, tab) {
@@ -315,7 +331,7 @@ function bookModal(openId, tab) {
   if (openId) { const i = LORE.findIndex((e) => e.id === openId); if (i >= 0) { bookTab = 'chapters'; bookIdx = i; } }
   else if (bookTab === 'chapters') { let last = 0; LORE.forEach((e, i) => { if (state.journal.includes(e.id)) last = i; }); bookIdx = Math.min(LORE.length - 1, Math.max(bookIdx, last)); }
   openModal(`<div class="book"><div class="spine"><span>${esc(state.name || 'The Marigold Line')}</span><small>${state.journal.length} of ${LORE.length} pages written</small></div>
-  <nav class="tabs" role="tablist">${[['chapters', 'Chapters'], ['folk', 'Folk'], ['plates', 'Plates'], ['postcards', 'Postcards'], ['keeps', 'Keepsakes']].map(([k, n]) => `<button role="tab" data-t="${k}" aria-selected="${k === bookTab}">${n}</button>`).join('')}</nav>
+  <nav class="tabs" role="tablist">${[['chapters', 'Chapters'], ['folk', 'Folk'], ['plates', 'Plates'], ['postcards', 'Postcards'], ['album', 'Album'], ['keeps', 'Keepsakes']].map(([k, n]) => `<button role="tab" data-t="${k}" aria-selected="${k === bookTab}">${n}</button>`).join('')}</nav>
   <div id="pg" class="page"></div><div class="pager" id="pager"></div><div class="row2"><button class="btn ghost" id="x">Close the book</button></div></div>`);
   $('x').onclick = closeModal;
   modal.querySelectorAll('[data-t]').forEach((b) => { b.onclick = () => { bookTab = b.dataset.t; modal.querySelectorAll('[data-t]').forEach((o) => o.setAttribute('aria-selected', o === b)); renderBook(true); }; });
@@ -337,12 +353,15 @@ function renderBook(flip) {
   } else if (bookTab === 'plates') {
     const pl = (state.plates || []).slice().reverse();
     html = `<div class="vol">Plates</div><p class="intro">Each region you cross is painted into the book. There is always another.</p><div class="plates">${pl.map((x) => { const P = PALETTES[x.pal] || PALETTES[0]; return `<figure>${plateSwatch(hex(P.sky[0]), hex(P.sky[1]), hex(P.ground), hex(P.tint), x.weather)}<figcaption><b>${esc(x.name)}</b><span>${esc(x.line)}</span><small>Mile ${x.mile}</small></figcaption></figure>`; }).join('')}</div>`;
+  } else if (bookTab === 'album') {
+    html = `<div class="vol">Album</div>${photos.length ? `<div class="album">${photos.slice().reverse().map((p) => `<figure class="polaroid"><img src="${p.img}" alt="${esc(p.cap)}"><figcaption>${esc(p.cap)}<small>${esc(new Date(p.id).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))} · mile ${p.mile}</small></figcaption><button class="del" data-del="${p.id}" aria-label="Remove this photograph">\u00d7</button></figure>`).join('')}</div>` : '<p class="intro">Tap the camera at the top right to take a photograph of whatever is in front of you. They will be kept here. (Photographs stay on this device and are not part of the save code.)</p>'}`;
   } else if (bookTab === 'postcards') {
     html = `<div class="vol">Postcards</div><div class="pcs">${state.postcards.length ? state.postcards.slice().reverse().slice(0, 40).map((c) => c.from ? `<div class="card-pc letter"><em>${esc(c.text)}</em><small>\u2709 ${esc(c.from)} · mile ${c.mile}</small></div>` : `<div class="card-pc">${esc(c.text)}<small>Mile ${c.mile} · ${esc(c.region)}</small></div>`).join('') : '<p class="intro">Postcards turn up as the Line rolls by.</p>'}</div>`;
   } else {
     html = `<div class="vol">Keepsakes</div>${state.keepsakes.length ? `<ul class="keeps">${state.keepsakes.map((k) => `<li><b>${esc(k.name)}</b><span>left by ${esc(k.who)}. ${esc(k.line)}</span></li>`).join('')}</ul>` : '<p class="intro">When someone steps off at their stop, they leave a small thing behind. It will be kept here.</p>'}`;
   }
-  pg.innerHTML = html; pager.innerHTML = pagerHtml; pager.hidden = !pagerHtml; pg.scrollTop = 0;
+  pg.innerHTML = html; pg.querySelectorAll('[data-del]').forEach((b) => { b.onclick = () => { photos = photos.filter((p) => String(p.id) !== b.dataset.del); savePhotos(); renderBook(false); }; });
+  pager.innerHTML = pagerHtml; pager.hidden = !pagerHtml; pg.scrollTop = 0;
   if (flip) { pg.classList.remove('flip'); void pg.offsetWidth; pg.classList.add('flip'); }
   const pv = $('pv'), nx = $('nx');
   if (pv) pv.onclick = () => { if (bookTab === 'chapters') bookIdx--; else folkIdx--; audio.pop(); renderBook(true); };
@@ -523,6 +542,7 @@ const roomLabels = new Map(), tagLabels = new Map();
 let hudT = 0, chuffT = 0;
 function updateHud(dt, time) {
   hudT += dt;
+  $('snap').hidden = modalOpen || !!drawing;
   // stoke needle
   stokeT += dt; needleQ = 0.5 + 0.5 * Math.sin(stokeT * 2.6);
   $('needle').style.left = `calc((100% - 5px) * ${needleQ.toFixed(3)})`;
@@ -583,6 +603,6 @@ function loop(t) {
   if (dt > 2.5) { const rep = sim.offline(dt); if (dt > 60 && (rep.miles > 0.3 || rep.charm > 2)) queueModal(() => awayModal(rep)); dt = 0.016; }
   dt = Math.min(dt, 0.1);
   if (state.mode === 'journey' && Date.now() - (state.lastInput || 0) > AFK_MS) setGameMode('afk', true);
-  sim.tick(dt); if (view === 'journey') journey.update(dt, t / 1000); world.frame(dt, t / 1000); updateHud(dt, t / 1000);
+  sim.tick(dt); if (view === 'journey') journey.update(dt, t / 1000); world.frame(dt, t / 1000); if (snapPending) { snapPending = false; takePhoto(); } updateHud(dt, t / 1000);
 }
 requestAnimationFrame(loop);

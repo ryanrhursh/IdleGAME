@@ -191,6 +191,17 @@ body[data-look="cinema"] #dock button[aria-pressed="true"] { background: transpa
 
 
 /* ---------- journey mode ---------- */
+#snap { position: fixed; right: calc(var(--sar, 0px) + 12px); top: 44%; width: 44px; height: 44px; border-radius: 50%; background: var(--glass); color: var(--fg); border: 1px solid var(--line); display: grid; place-items: center; z-index: 9; box-shadow: 0 2px 0 rgba(0,0,0,.18); }
+#snap[hidden] { display: none; }
+#flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 60; transition: opacity .35s ease-out; }
+#flash.on { opacity: .85; transition: none; }
+.album { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; padding: 4px 2px; }
+.polaroid { margin: 0; background: #fffaf0; padding: 6px 6px 9px; box-shadow: 0 2px 7px rgba(60, 30, 10, .35); transform: rotate(-1.2deg); position: relative; }
+.polaroid:nth-child(even) { transform: rotate(1.4deg); }
+.polaroid img { width: 100%; aspect-ratio: 4 / 5; object-fit: cover; display: block; border: 1px solid rgba(0,0,0,.12); }
+.polaroid figcaption { font-size: 12px; color: #4a3220; margin-top: 5px; line-height: 1.25; font-family: var(--serif, Georgia, serif); }
+.polaroid figcaption small { color: #8a6a4a; display: block; }
+.polaroid .del { position: absolute; top: 2px; right: 2px; width: 24px; height: 24px; border-radius: 50%; border: 0; background: rgba(255,250,240,.85); color: #6a4a2e; font-size: 14px; line-height: 1; cursor: pointer; }
 #modeBtn { pointer-events: auto; height: 40px; padding: 0 14px; border-radius: 14px; background: var(--gold); color: var(--gold-ink); border: 1px solid var(--line); font-weight: 700; flex: none; }
 body[data-mode="journey"] #modeBtn { background: var(--glass); color: var(--fg); }
 body[data-mode="journey"] #bLine, body[data-mode="journey"] #bInside { display: none; }
@@ -283,6 +294,7 @@ body:not([data-look="storybook"]) .book .spine small, body:not([data-look="story
 <button id="platform" hidden></button>
 <div id="hint" hidden></div>
 
+<button id="snap" aria-label="Take a photograph" hidden><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.6"/></svg></button><div id="flash"></div>
 <div id="stoke">
   <button id="stokeBtn" aria-label="Stoke the boiler"><i class="zone"></i><i class="needle" id="needle"></i><span>Stoke</span></button>
   <div id="steam"><i id="steamBar"></i></div>
