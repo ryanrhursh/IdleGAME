@@ -7,7 +7,7 @@ import { LOOK } from './look.js';
 import { toon, basic, glowSprite, mesh, G, box, cyl, sph, cone, makeFigure, gearGeometry, toonGradient } from './gfx.js';
 
 const FLOOR_H = 0.1;
-const FURN = 0.7;   // in first person, furniture and duty props are drawn at this fraction of their top-down size (footprints stay put)
+const FURN = 0.55;   // in first person, furniture and duty props are drawn at this fraction of their top-down size (footprints stay put)
 const STYLES = [[1, 1, 1], [1.25, 1.0, 0.8], [0.8, 1.0, 1.3], [1.3, 0.8, 1.1]];
 
 function stitchTexture() {
