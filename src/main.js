@@ -30,7 +30,7 @@ catch (e) {
 }
 let errShown = false;
 addEventListener('error', () => { if (errShown) return; errShown = true; try { toast('Something went wrong. Your progress is saved; reloading the page is safe.'); } catch (e) { /* ignore */ } });
-window.__game = { passengerAt, sim, world, state, landmarkFor, stopModal: () => stopModal(), farewellModal: (p, k, f) => farewellModal(p, k, f), talkScene: (c, st) => talkScene(c, st) };
+window.__game = { passengerAt, audio, sim, world, state, landmarkFor, stopModal: () => stopModal(), farewellModal: (p, k, f) => farewellModal(p, k, f), talkScene: (c, st) => talkScene(c, st) };
 if (state.gfx === 'low' || state.gfx === 'high') world.setGfx(state.gfx);
 function save() { try { state.last = Date.now(); localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (e) { /* storage may be unavailable */ } }
 addEventListener('visibilitychange', () => { if (document.hidden) save(); });

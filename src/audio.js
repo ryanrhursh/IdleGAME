@@ -40,6 +40,43 @@ export class Audio {
     const src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(); f.type = 'lowpass'; f.frequency.value = 520; g.gain.value = 0.05 * v;
     src.buffer = buf; src.connect(f); f.connect(g); g.connect(this.master); src.start();
   }
+
+  // ---- first person: footsteps, the train's low rumble, and a little something different in each kind of room ----
+  noiseBuf(sec) { const c = this.ctx, n = Math.floor(c.sampleRate * sec), b = c.createBuffer(1, n, c.sampleRate), d = b.getChannelData(0); let l = 0; for (let i = 0; i < n; i++) { l = l * 0.97 + (Math.random() * 2 - 1) * 0.03; d[i] = l * 6; } return b; }
+  step(soft) {
+    if (!this.ctx || !this.enabled) return;
+    const c = this.ctx, n = Math.floor(c.sampleRate * 0.07), buf = c.createBuffer(1, n, c.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 3);
+    const src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(); f.type = 'lowpass'; f.frequency.value = soft ? 320 : 700 + Math.random() * 200; g.gain.value = soft ? 0.05 : 0.075;
+    src.buffer = buf; src.connect(f); f.connect(g); g.connect(this.master); src.start();
+  }
+  journeyOn(on) {
+    if (!this.ctx) return;
+    if (!this.rumble) {
+      const c = this.ctx, src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(); src.buffer = this.noiseBuf(3); src.loop = true; f.type = 'lowpass'; f.frequency.value = 150; g.gain.value = 0;
+      src.connect(f); f.connect(g); g.connect(this.master); src.start(); this.rumble = g;
+    }
+    this.rumble.gain.setTargetAtTime(on && this.enabled ? 0.05 : 0, this.ctx.currentTime, 0.4);
+  }
+  // type is the room the conductor is standing in; called every frame in Journey
+  ambience(type, dt, speedMul = 1) {
+    if (!this.ctx || !this.enabled) return;
+    if (this.rumble) this.rumble.gain.setTargetAtTime(0.03 + Math.min(0.05, 0.02 * speedMul), this.ctx.currentTime, 0.5);
+    this.ambT = (this.ambT || 0) - dt; if (this.ambT > 0) return;
+    const r = Math.random();
+    const EV = {
+      garden: () => { this.tone(1900 + r * 900, 0.09, 0.025, 'sine', 2600); setTimeout(() => this.tone(2300 + r * 700, 0.08, 0.02, 'sine', 3000), 120); return 2.5 + r * 4; },
+      bath: () => { this.tone(900 + r * 200, 0.12, 0.03, 'sine', 500); return 1.2 + r * 2.5; },
+      aquarium: () => { this.tone(500 + r * 300, 0.1, 0.025, 'sine', 900); return 1.5 + r * 3; },
+      workshop: () => { this.tone(1100, 0.03, 0.03, 'square'); setTimeout(() => this.tone(900, 0.03, 0.025, 'square'), 480); return 1 + r; },
+      library: () => { this.chuff(0.25); return 4 + r * 6; },
+      music: () => { this.note(Math.floor(r * 8) + 2, 0.18); return 4 + r * 6; },
+      observatory: () => { this.tone(2400 + r * 800, 0.8, 0.012, 'sine'); return 3 + r * 4; },
+      dining: () => { this.tone(1700 + r * 300, 0.06, 0.03, 'triangle'); return 3 + r * 5; },
+      sleeper: () => { this.chuff(0.18); return 5 + r * 6; },
+    };
+    this.ambT = EV[type] ? EV[type]() : 3 + r * 4;
+  }
   coal(perfect) { this.tone(perfect ? 330 : 200, 0.16, 0.08, 'square', perfect ? 660 : 160); if (perfect) setTimeout(() => this.note(7, 0.5), 80); }
   chord() { [0, 2, 4].forEach((s, i) => setTimeout(() => this.note(5 + s, 0.45), i * 90)); }
 }

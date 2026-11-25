@@ -34,7 +34,7 @@ export class Journey {
   enter() {
     const sp = this.sim.spawn(); this.x = sp.x; this.z = sp.z; this.pitch = 0; this.path = []; this.goal = null;
     const p = this.sim.post(); this.yaw = Math.atan2(-(p.x - sp.x), -(p.z - sp.z)) + Math.PI; // face away from the post, down the corridor
-    this.active = true; this.propsKey = ''; this.sim.setJourney(true); this.syncProps(true);
+    this.ui.audio.journeyOn(true); this.active = true; this.propsKey = ''; this.sim.setJourney(true); this.syncProps(true);
   }
   requestLock() {
     const c = this.world.canvas;
@@ -42,7 +42,7 @@ export class Journey {
   }
   releaseLock() { try { if (document.pointerLockElement) document.exitPointerLock(); } catch (e) { /* ignore */ } }
   tapCenter() { const r = this.world.canvas.getBoundingClientRect(); this.tap(r.left + r.width / 2, r.top + r.height / 2); }
-  exit() { this.releaseLock(); this.hover = false; this.active = false; this.sim.conductor = null; this.sim.setJourney(false); this.keys.clear(); this.stick.x = this.stick.y = 0; this.prompt = null; }
+  exit() { this.ui.audio.journeyOn(false); this.releaseLock(); this.hover = false; this.active = false; this.sim.conductor = null; this.sim.setJourney(false); this.keys.clear(); this.stick.x = this.stick.y = 0; this.prompt = null; }
 
   // ----- what is here to use -----
   items() {
@@ -179,9 +179,10 @@ export class Journey {
         this.block = (this.block || 0) + dt;
         if (this.block > 0.4) { this.block = 0; const d = this.dest; this.path = []; if (d && (this.repaths || 0) < 16) { this.repaths = (this.repaths || 0) + 1; this.walkTo(d.x, d.z, d.then, true); } }
       } else if (nx === this.x && nz === this.z) this.path = []; else this.block = 0;
-      moved = Math.hypot(nx - this.x, nz - this.z) > 1e-4; this.x = nx; this.z = nz; if (moved) this.bob += dt * 9;
+      moved = Math.hypot(nx - this.x, nz - this.z) > 1e-4; this.x = nx; this.z = nz;
+      if (moved) { const b0 = Math.floor(this.bob / Math.PI); this.bob += dt * 9; if (Math.floor(this.bob / Math.PI) !== b0) { const rm = sim.roomAt(Math.floor(this.x), Math.floor(this.z)); this.ui.audio.step(!rm || rm.type === 'corridor' || rm.type === 'parlor' || rm.type === 'sleeper'); } }
     }
-    sim.conductor = { x: this.x, z: this.z };
+    sim.conductor = { x: this.x, z: this.z }; { const rm = sim.roomAt(Math.floor(this.x), Math.floor(this.z)); this.ui.audio.ambience(rm ? rm.type : 'corridor', dt, sim.speedMul()); }
     this.world.inside.handsMoving = moved; this.world.inside.bobPhase = this.bob;
     // no pointer lock available: turn by where the cursor sits (dead zone in the middle, faster toward the edges)
     if (this.hover && !this.locked && this.mouse.over) {

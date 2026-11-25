@@ -11,7 +11,10 @@
 - Turning: touch drag-look is ~24% slower and glides to its target; tap-walk turns ease round (max ~140°/s) instead of snapping. Mouse look is unchanged.
 - Walking speed 1.9 to 2.3 then down to 1.2 (menu now shows an "Updated ..." build timestamp so you can check your phone has the latest), view widened (FOV 74 to 80 landscape, 92 on tall phone screens), stoke bar moves aside for the stick, joystick dead zone, and a looser tap threshold for fingers (16 px, 600 ms).
 
-## Latest: the look (storybook polish)
+## Latest: five more ideas (each pushed separately)
+1. **Journey sound:** footsteps (soft on rugs, bright on wood), a low train rumble that follows steam, and a gentle ambience per room type (birds in the garden, drips in the bath, bubbles at the aquarium, ticking in the workshop, a note now and then in the music room...). All synthesized in `audio.js`; respects the Sound toggle.
+
+## Earlier: the look (storybook polish)
 - **Inside:** every room now has its own wallpaper tint (instance colours on a striped, flowered, dado-railed wallpaper texture); door posts everywhere and lintels in first person; framed pictures on about a third of the walls in sleepers, dining cars, parlors, corridors and the music room (first person only, never over a window); round rugs under dining tables and a rug and potted plant in sleepers.
 - **Outside:** telegraph poles with wire running beside the track, round bushes at the track edge (tinted by the region palette), drifting clouds, and a few birds. These sit outside the region-weight system, so existing worlds are unchanged.
 - Nothing here changes rules or saves.
