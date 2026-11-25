@@ -3,6 +3,7 @@
 ## Latest: smoother walking in Journey
 - Phones now get the joystick **and** tap-to-walk together by default (Menu > Walking cycles stick + tap / tap only / stick only; desktop stays tap-only).
 - Tap-to-walk takes smooth straight legs instead of tile-to-tile zigzags, turns toward the goal quickly before moving, stops and interacts as soon as you are in reach of the person or thing, and waits and re-routes if a passenger is in the way instead of giving up.
+- Menu > Troubleshooting has six switches (bloom, outlines, paper grain, lamp glows+dust, wallpaper pattern, wall pictures) for bisecting render glitches on a real phone.
 - Possible phone-only speckle in first person: dust motes hidden in Journey; vignette smoothstep fixed (edges were in undefined order); grade pass clamps NaN/huge values. If dots persist, try Menu > Graphics: Low (turns bloom off) to see whether bloom is the cause.
 - Furniture and duty props are drawn at 55% (`FURN` in inside.js) and 80% in first person only; footprints and collision are unchanged.
 - Journey scale (`JSCALE` in logic.js, 1.45): people, your eye height, hands and collision are drawn smaller in first person so rooms feel ~1.45x bigger. One constant to tune.

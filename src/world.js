@@ -84,6 +84,16 @@ export class World {
     const v = this.tmp.set(x, y, z).project(this.cam), r = this.canvas.getBoundingClientRect();
     out.x = (v.x * 0.5 + 0.5) * r.width + r.left; out.y = (-v.y * 0.5 + 0.5) * r.height + r.top; out.ok = v.z < 1 && v.z > -1; return out;
   }
+  // troubleshooting switches (menu > Troubleshooting): turn single layers of the picture off to find what causes a glitch
+  debug(k, off) {
+    const g = this.grade && this.grade.uniforms, G = LOOK.grade || {}, ins = this.inside;
+    if (k === 'bloom') this.bloom.enabled = !off;
+    else if (k === 'outline' && g) g.edge.value = off ? 0 : G.edge;
+    else if (k === 'grain' && g) { g.paper.value = off ? 0 : G.paper; g.grain.value = off ? 0 : G.grain; }
+    else if (k === 'glow') ins.scene.traverse((o) => { if ((o.isSprite || o.isPoints) && o.material) o.material.visible = !off; });
+    else if (k === 'paper') { ins.walls.material.map = off ? null : ins.wallTex; ins.walls.material.needsUpdate = true; }
+    else if (k === 'pics') { ins.frames.visible = ins.pics.visible = !off; }
+  }
   setGfx(mode) {
     this.gfxMode = mode;
     if (mode === 'low') { this.quality = 'low'; this.useBloom = false; this.pr = Math.min(devicePixelRatio || 1, 1.25); this.resize(); }

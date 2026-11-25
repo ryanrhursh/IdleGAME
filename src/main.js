@@ -348,6 +348,7 @@ function renderBook(flip) {
 }
 const BUILD_TIME = typeof __BUILD_TIME__ === 'undefined' ? '' : __BUILD_TIME__;
 function buildStamp() { if (!BUILD_TIME) return 'unknown (dev build)'; const d = new Date(BUILD_TIME); return isNaN(d) ? BUILD_TIME : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + ' (' + d.toISOString().slice(0, 16).replace('T', ' ') + ' UTC)'; }
+const DBG = { bloom: 'Glow (bloom)', outline: 'Outlines', grain: 'Paper grain', glow: 'Lamp glows and dust', paper: 'Wallpaper pattern', pics: 'Wall pictures' }, dbgOff = {};
 function menuModal() {
   openModal(`<div class="eyebrow">Settings</div><h2>The Marigold Line</h2>
   <div class="row2"><button class="btn ghost" id="snd">Sound: ${audio.enabled ? 'on' : 'off'}</button><button class="btn ghost" id="rc">Recentre the view</button></div>
@@ -359,7 +360,11 @@ function menuModal() {
   <div class="row2"><button class="btn ghost" id="auto">While I'm away, welcome travellers: ${state.auto ? 'yes' : 'no'}</button></div>
   <div><small style="color:var(--muted)">Name your train</small><input type="text" id="tn" maxlength="24" value="${esc(state.name)}" placeholder="The Marigold"></div>
   <div class="row2"><button class="btn ghost sm" id="exp">Copy save code</button><button class="btn ghost sm" id="imp">Load save code</button><button class="btn ghost sm" id="rst">Start over</button></div>
+  <details style="margin:6px 0"><summary style="cursor:pointer;color:var(--muted);font-size:13px">Troubleshooting: switch parts of the picture off</summary>
+    <p style="color:var(--muted);font-size:12px;margin:6px 0">If you see odd dots or specks in Journey, turn these off one at a time and see which makes them vanish. Tell me which. (They reset when you reload.)</p>
+    <div class="row2">${Object.entries(DBG).map(([k, n]) => `<button class="btn ghost sm" data-dbg="${k}">${n}: ${dbgOff[k] ? 'off' : 'on'}</button>`).join('')}</div></details>
   <div id="io"></div><p class="buildstamp" style="color:var(--muted);font-size:12px;text-align:center;margin:4px 0" title="${esc(BUILD_TIME)}">Updated ${esc(buildStamp())}</p><div class="row2"><button class="btn" id="x">Done</button></div>`);
+  modal.querySelectorAll('[data-dbg]').forEach((b) => { b.onclick = () => { const k = b.dataset.dbg; dbgOff[k] = !dbgOff[k]; world.debug(k, dbgOff[k]); b.textContent = `${DBG[k]}: ${dbgOff[k] ? 'off' : 'on'}`; }; });
   $('x').onclick = closeModal;
   $('snd').onclick = (e) => { audio.enabled = !audio.enabled; state.sound = audio.enabled; audio.apply(); e.target.textContent = 'Sound: ' + (audio.enabled ? 'on' : 'off'); };
   $('rc').onclick = () => { world.line.recentre(world.aspect); world.inside.fit(world.aspect); closeModal(); };
