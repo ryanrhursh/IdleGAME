@@ -77,6 +77,12 @@ export class Audio {
     };
     this.ambT = EV[type] ? EV[type]() : 3 + r * 4;
   }
+  moment(type) {
+    if (type === 'music') [0, 2, 4, 7, 4].forEach((s, i) => setTimeout(() => this.note(2 + s, 0.55), i * 220));
+    else if (type === 'aquarium' || type === 'bath') [0, 1, 2].forEach((i) => setTimeout(() => this.tone(520 + i * 160, 0.12, 0.05, 'sine', 900), i * 130));
+    else if (type === 'workshop') [0, 1, 2].forEach((i) => setTimeout(() => this.tone(1100, 0.03, 0.05, 'square'), i * 150));
+    else this.chord();
+  }
   coal(perfect) { this.tone(perfect ? 330 : 200, 0.16, 0.08, 'square', perfect ? 660 : 160); if (perfect) setTimeout(() => this.note(7, 0.5), 80); }
   chord() { [0, 2, 4].forEach((s, i) => setTimeout(() => this.note(5 + s, 0.45), i * 90)); }
 }

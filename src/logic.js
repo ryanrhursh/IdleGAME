@@ -1,5 +1,5 @@
 // Game rules and simulation for the Marigold Line. No rendering code lives here.
-import { ROOMS, HOBBY_ROOM, PASSENGERS, GEN_FIRST, GEN_LAST, GEN_TYPES, REGION_ADJ, REGION_NOUN, STOP_A, STOP_B, PALETTES, WEATHER, HINT_WORDS, LANDMARKS, POSTCARD_OPEN, LORE, PLATE_LINES, TELLS, REPLIES, LETTERS, RETURN_LINES, FAREWELLS, CHAT_LINES, JOB_FLAVOR, OCCUPATIONS, QUIRKS, SECRETS, REGION_FLAVOR, RELATIONS, FRIEND_LINES, SQUABBLE_LINES, WISH_LINES } from './data.js';
+import { ROOMS, HOBBY_ROOM, PASSENGERS, GEN_FIRST, GEN_LAST, GEN_TYPES, REGION_ADJ, REGION_NOUN, STOP_A, STOP_B, PALETTES, WEATHER, HINT_WORDS, LANDMARKS, POSTCARD_OPEN, LORE, PLATE_LINES, TELLS, REPLIES, LETTERS, RETURN_LINES, FAREWELLS, CHAT_LINES, JOB_FLAVOR, MOMENTS, OCCUPATIONS, QUIRKS, SECRETS, REGION_FLAVOR, RELATIONS, FRIEND_LINES, SQUABBLE_LINES, WISH_LINES } from './data.js';
 
 export const GW = 24, GH = 16;
 export const BASE_SPEED = 0.12; // miles per second at idle pressure
@@ -105,7 +105,7 @@ export function newState(now = Date.now()) {
     grid: { x0: 6, y0: 4, x1: 15, y1: 9 },
     rooms: [{ id: 1, type: 'sleeper', x: 6, y: 4, w: 3, h: 3 }, { id: 2, type: 'dining', x: 9, y: 4, w: 4, h: 3 }, { id: 3, type: 'corridor', x: 6, y: 7, w: 10, h: 1 }],
     nextRoom: 4, unlocked: ['sleeper', 'dining', 'parlor', 'corridor'],
-    passengers: [], nextPid: 1, keepsakes: [], postcards: [], tickets: [], plates: [], talesHeard: 0, departed: [], mail: [], returns: 0, lettersGot: 0, wishes: 0, peace: 0, rel: {}, mode: 'afk', controls: 'tap', sens: 1, jobs: { list: [], done: 0, nextAt: 0, id: 1 }, lastInput: now, journal: [],
+    passengers: [], nextPid: 1, keepsakes: [], postcards: [], tickets: [], plates: [], talesHeard: 0, departed: [], mail: [], returns: 0, lettersGot: 0, wishes: 0, peace: 0, moments: 0, momentAt: {}, rel: {}, mode: 'afk', controls: 'tap', sens: 1, jobs: { list: [], done: 0, nextAt: 0, id: 1 }, lastInput: now, journal: [],
     line: { seed: Math.floor(Math.random() * 1e9), region: 'M', regionStart: 0, nextStop: 2.5, stopIndex: 0, nextLandmark: 7, forkChosen: null, forkAnnounced: false, pending: null },
     hint: 0, auto: false, sound: true, name: '', paintSeen: false,
   };
@@ -292,6 +292,27 @@ export class Sim {
     let nx = x + dx; if (!this.canStand(nx, z)) nx = x;
     let nz = z + dz; if (!this.canStand(nx, nz)) nz = z;
     return [nx, nz];
+  }
+  // ---- moments: stand in a special room and do the small thing it invites ----
+  momentSpots() {
+    const out = [];
+    for (const r of this.s.rooms) {
+      const m = MOMENTS[r.type]; if (!m) continue;
+      const at = { aquarium: [r.w / 2, 0.55], library: [r.w / 2, 0.55], music: [r.w / 2, r.h / 2 + 0.25], observatory: [r.w / 2 + 0.35, r.h / 2], bath: [r.w - 0.5, 0.5], workshop: [Math.max(0.8, r.w - 0.8), 0.7], garden: [r.w / 2, r.h / 2 + 0.7] }[r.type];
+      out.push({ rid: r.id, type: r.type, label: m.label, x: r.x + Math.min(r.w - 0.3, Math.max(0.3, at[0])), z: r.y + Math.min(r.h - 0.3, Math.max(0.3, at[1])) });
+    }
+    return out;
+  }
+  momentReady(rid) { return Date.now() - ((this.s.momentAt || {})[rid] || 0) > 150000; }
+  doMoment(rid) {
+    const r = this.roomById.get(rid), m = r && MOMENTS[r.type]; if (!m || !this.momentReady(rid)) return null;
+    const s = this.s; if (!s.momentAt) s.momentAt = {}; s.momentAt[rid] = Date.now(); s.moments = (s.moments || 0) + 1;
+    const gain = Math.round((8 + 4 * (r.lv || 0)) * Math.max(1, this.charmRate() / 40) * this.charmMul); s.charm += gain;
+    let liked = 0;
+    for (const p of s.passengers) { const here = this.roomAt(Math.floor(p.x), Math.floor(p.y)) === r; if (!here) continue; const fav = r.type === HOBBY_ROOM[defOf(p).hobby]; this.addMood(p, fav ? 12 : 5); if (fav) { liked++; this.ev('emote', { id: p.id, kind: 'heart' }); } }
+    const lines = m.lines, text = lines[Math.floor(Math.random() * lines.length)];
+    this.checkProgress();
+    return { type: r.type, text: `${text} (+${gain} Charm${liked ? ', and someone is delighted' : ''})`, gain };
   }
   post() { const r = this.s.rooms.find((q) => q.type === 'corridor') || this.s.rooms[0]; return { x: r.x + 0.5, z: r.y + 0.5, vertical: r.h > r.w }; }
   spawn() { const p = this.post(); return p.vertical ? { x: p.x, z: p.z + 1 } : { x: p.x + 1, z: p.z }; }
@@ -679,7 +700,7 @@ export class Sim {
   }
   loreCtx() {
     const s = this.s;
-    return { miles: s.miles, aboard: s.passengers.length, met: s.metCount, unfolds: s.unfolds, rooms: s.rooms.length, keepsakes: s.keepsakes.length, postcards: s.postcards.length, tickets: s.tickets.length, tales: s.talesHeard || 0, returns: s.returns || 0, letters: s.lettersGot || 0, wishes: s.wishes || 0, bonds: Object.values(s.rel || {}).filter((x) => x.bond >= 30).length, peace: s.peace || 0, jobs: (s.jobs && s.jobs.done) || 0, looks: s.looks || 0, levels: s.rooms.reduce((a, r) => a + (r.lv || 0), 0) };
+    return { miles: s.miles, aboard: s.passengers.length, met: s.metCount, unfolds: s.unfolds, rooms: s.rooms.length, keepsakes: s.keepsakes.length, postcards: s.postcards.length, tickets: s.tickets.length, tales: s.talesHeard || 0, returns: s.returns || 0, letters: s.lettersGot || 0, wishes: s.wishes || 0, moments: s.moments || 0, bonds: Object.values(s.rel || {}).filter((x) => x.bond >= 30).length, peace: s.peace || 0, jobs: (s.jobs && s.jobs.done) || 0, looks: s.looks || 0, levels: s.rooms.reduce((a, r) => a + (r.lv || 0), 0) };
   }
   loreProgress(e) {
     const ks = Object.keys(e.need); if (!ks.length) return 1;

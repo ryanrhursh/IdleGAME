@@ -130,7 +130,7 @@ export const VOLUMES = ['The Marigold', 'The Folk', 'The Line'];
 export const NEED_TEXT = {
   miles: (n) => `Travel ${n} miles`, aboard: (n) => `Have ${n} ${n === 1 ? 'traveller' : 'travellers'} aboard`, met: (n) => `Meet ${n} ${n === 1 ? 'stranger' : 'strangers'} at stations`,
   unfolds: (n) => `Unfold the train ${n} ${n === 1 ? 'time' : 'times'}`, rooms: (n) => `Build ${n} rooms`, keepsakes: (n) => `See ${n} ${n === 1 ? 'traveller' : 'travellers'} off at their stop`,
-  returns: (n) => `Welcome back ${n} ${n === 1 ? 'old friend' : 'old friends'}`, letters: (n) => `Receive ${n} ${n === 1 ? 'letter' : 'letters'} from people who have left`, postcards: (n) => `Collect ${n} postcards`, tickets: (n) => `Cross into ${n} regions`, wishes: (n) => `Grant ${n} ${n === 1 ? 'wish' : 'wishes'}`, bonds: (n) => `Watch ${n} ${n === 1 ? 'friendship' : 'friendships'} take root`, peace: (n) => `Make peace between ${n} ${n === 1 ? 'pair' : 'pairs'} of travellers`, tales: (n) => `Hear ${n} tales from your passengers`, levels: (n) => `Furnish rooms to ${n} levels in all`,
+  returns: (n) => `Welcome back ${n} ${n === 1 ? 'old friend' : 'old friends'}`, letters: (n) => `Receive ${n} ${n === 1 ? 'letter' : 'letters'} from people who have left`, postcards: (n) => `Collect ${n} postcards`, tickets: (n) => `Cross into ${n} regions`, wishes: (n) => `Grant ${n} ${n === 1 ? 'wish' : 'wishes'}`, moments: (n) => `Spend ${n} quiet ${n === 1 ? 'moment' : 'moments'} in the train's rooms`, bonds: (n) => `Watch ${n} ${n === 1 ? 'friendship' : 'friendships'} take root`, peace: (n) => `Make peace between ${n} ${n === 1 ? 'pair' : 'pairs'} of travellers`, tales: (n) => `Hear ${n} tales from your passengers`, levels: (n) => `Furnish rooms to ${n} levels in all`,
 };
 export const LORE = [
   { id: 'start', vol: 0, scene: 'once', title: 'Once Upon a Rail', need: {}, text: 'There was once a small train called the Marigold, and she was far larger inside than out. Nobody remembers who stitched the charm into her seams. Everybody agrees it was done kindly.' },
@@ -162,6 +162,7 @@ export const LORE = [
   { id: 'wish1', vol: 1, scene: 'guest', title: 'The Thing They Hoped For', need: { wishes: 1 }, text: 'Everyone who boards is carrying one small hope, folded very small. Nobody asks you to unfold it. But sometimes, if you build the right room or cross the right border, it opens by itself, and the whole carriage can feel it.' },
   { id: 'friends1', vol: 1, scene: 'dinner', title: 'Two Chairs, Pulled Close', need: { bonds: 1 }, text: 'You noticed two passengers had begun to sit together without being asked. The Marigold, tactful as ever, rearranged the furniture so that the chairs were just a little nearer.' },
   { id: 'peace1', vol: 1, scene: 'seat', title: 'The Art of Sitting Between', need: { peace: 1 }, text: 'You did not say anything clever. You sat between two quarrelling people and let the silence do the mending. It turns out that is most of what a conductor is for.' },
+  { id: 'moment1', vol: 1, scene: 'seat', title: 'A Little Time for Oneself', need: { moments: 4 }, text: 'Nobody ever put it on the duty list: the pinch of flakes for the fish, the four half-remembered notes, the one sentence from a random book. The Marigold noticed anyway. A train that is looked after, she decided, looks after back.' },
   { id: 'wish5', vol: 2, scene: 'glow', title: 'A Train of Small Miracles', need: { wishes: 5 }, text: 'Five hopes have come true on the Marigold now. None of them were large. All of them were enough. The charm in the seams has grown a little brighter, as if it too had been waiting.' },
   { id: 'last', vol: 2, scene: 'last', title: 'There Is No Last Page', need: { miles: 1600, tickets: 10 }, text: 'There is no last page. There is only the next one, still blank, and a pencil left on the windowsill for you. The Marigold waits at the platform with her engine humming. She is in no hurry. She has never been in a hurry.' },
 ];
@@ -323,4 +324,15 @@ export const SQUABBLE_LINES = ['{a} and {b} {act}. The air in the room has gone 
 export const WISH_LINES = {
   granted: ['{n} looks around the train as if seeing it for the first time. "That was what I was hoping for. I did not think I would say so aloud."'],
   missed: ['There was one thing {n} had hoped for: {wish} It did not quite happen, and {n} says that is all right. Perhaps next time.'],
+};
+
+// ---------- room moments: small things to do in person, in the rooms that invite them ----------
+export const MOMENTS = {
+  aquarium: { label: 'Feed the fish', lines: ['A pinch of flakes, and every fish turns up at once, as if they had been waiting all afternoon.', 'The biggest one blinks at you, slowly, which you decide means thank you.'] },
+  music: { label: 'Play the piano', lines: ['You play four notes you half remember. Somebody in the next room hums the fifth.', 'The piano is slightly bigger on the inside, so the last chord rings for a long, kind moment.'] },
+  library: { label: 'Choose a book', lines: ['You pull out a book at random and it falls open at exactly the right page.', 'You read one sentence, and it is the one you needed. You slide the book back, grateful.'] },
+  observatory: { label: 'Look through the telescope', lines: ['A star you have never seen winks at you, and then, politely, winks again.', 'The telescope is pointed, as always, at something wonderful and slightly to the left.'] },
+  bath: { label: 'Add bath salts', lines: ['The steam smells of lavender, and everyone who passes slows down a little.', 'You stir the water with one finger. It is exactly warm enough.'] },
+  workshop: { label: 'Oil the gears', lines: ['A drop of oil, a turn of the wrench, and the whole room hums a tone happier.', 'The gear ticks smoothly now, as though it were quietly clearing its throat.'] },
+  garden: { label: 'Smell the blossoms', lines: ['Something here is blooming out of season, and has decided not to mind.', 'A petal lands on your sleeve and decides to stay for the journey.'] },
 };

@@ -208,6 +208,16 @@ const prog = sim.loreProgress({ need: { miles: 10000 } }); ok(prog >= 0 && prog 
   const lo = loadState(JSON.stringify(old)); const sim7 = new Sim(lo, {}); sim7.syncRt(); for (let i = 0; i < 30; i++) sim7.tick(0.1);
   ok(lo.rel && defOf(lo.passengers[0]).tales.length === 3 && sim7.checkWishes() === undefined, 'saves from before wishes still load and run');
 }
+// ---- room moments ----
+{
+  const s8 = newState(); const sim8 = new Sim(s8, {}); s8.charm = 1000;
+  s8.rooms.push({ id: 90, type: 'aquarium', x: 6, y: 9, w: 3, h: 2 }, { id: 91, type: 'music', x: 9, y: 9, w: 3, h: 2 }); sim8.index();
+  const spots = sim8.momentSpots(); ok(spots.length === 2 && spots.every((q) => sim8.tile.has(Math.floor(q.z) * 24 + Math.floor(q.x))), 'moment spots sit inside their rooms');
+  ok(sim8.canStand(spots[0].x, spots[0].z), 'you can stand at the aquarium moment spot');
+  const c0 = s8.charm; const r1 = sim8.doMoment(90); ok(r1 && r1.gain > 0 && s8.charm > c0 && s8.moments === 1, 'feeding the fish pays a little Charm');
+  ok(sim8.doMoment(90) === null && !sim8.momentReady(90), 'the same moment needs a rest before it can be repeated');
+  ok(sim8.momentReady(91) && sim8.doMoment(91) && s8.moments === 2 && sim8.loreCtx().moments === 2, 'a different room is still ready, and moments count towards the story');
+}
 // save round trip
 const back = loadState(JSON.stringify(s)); ok(back && back.rooms.length === s.rooms.length, 'save round-trips');
 console.log(fails ? `${fails} FAILED` : 'all passed'); process.exit(fails ? 1 : 0);
