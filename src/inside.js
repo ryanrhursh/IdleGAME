@@ -263,7 +263,7 @@ export class InsideView {
   }
   reach() { this.reachT = 0.32; }
   setJourney(on) {
-    this.journey = on; this.handsGroup.visible = on; this.handsGroup.scale.setScalar(0.8); if (!on) this.setHeld(null); this.built = -1; this.ceiling.visible = on; this.lamps.visible = on; this.jprops.visible = on;
+    this.journey = on; this.dustPts.visible = !on; this.handsGroup.visible = on; this.handsGroup.scale.setScalar(0.8); if (!on) this.setHeld(null); this.built = -1; this.ceiling.visible = on; this.lamps.visible = on; this.jprops.visible = on;
     this.gridLines.visible = !on; if (on) { this.sel.visible = false; this.ghost.visible = false; }
   }
   // Things you can use in person: the conductor's post, the tea urns, and anything left lying about.

@@ -28,8 +28,10 @@ const GradeShader = {
       float g = lum(texture2D(tDiffuse, uv + vec2(-e.x, e.y)).rgb), h2 = lum(texture2D(tDiffuse, uv + vec2(0., e.y)).rgb), i2 = lum(texture2D(tDiffuse, uv + vec2(e.x, e.y)).rgb);
       float gx = (c2 + 2.0*f + i2) - (a + 2.0*d2 + g), gy = (g + 2.0*h2 + i2) - (a + 2.0*b2 + c2);
       float m = smoothstep(0.12, 0.45, length(vec2(gx, gy))); c = mix(c, c * vec3(0.32, 0.22, 0.26), m * edge); }
+    if (c.r != c.r || c.g != c.g || c.b != c.b) c = vec3(0.0);   // never let a stray bad pixel through
+    c = clamp(c, 0.0, 8.0);
     float l = lum(c); c = mix(vec3(l), c, sat); c = (c - 0.5) * contrast + 0.5; c *= tint;
-    float v = smoothstep(0.95, 0.2, distance(uv, vec2(0.5))); c *= mix(1.0, v, vig);
+    float v = 1.0 - smoothstep(0.2, 0.95, distance(uv, vec2(0.5))); c *= mix(1.0, v, vig);
     c += (h(uv * res + time) - 0.5) * grain;
     if (paper > 0.0) { float n = vn(uv * res * 0.32) * 0.55 + vn(uv * res * 1.3) * 0.45; c *= 1.0 - paper * 0.28 * (0.5 - n) * -2.0 * 0.5; c = mix(c, c * vec3(1.04, 0.99, 0.91), paper * 0.5); }
     gl_FragColor = vec4(c, 1.0);
