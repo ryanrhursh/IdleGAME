@@ -219,12 +219,13 @@ export class InsideView {
       if (this.journey) for (const c of grp.children) { c.scale.multiplyScalar(FURN); c.position.y *= FURN; }
       const lv = Math.min(r.lv || 0, 8);
       for (let k = 0; k < lv * 2; k++) { const gl = glowSprite(k % 2 ? 0xffd890 : 0xff9ac0, 0.5, 0.9); gl.position.set(((k + 0.5) / (lv * 2)) * r.w, 0.62 + (k % 2) * 0.05, 0.06); grp.add(gl); grp.add(sph(0xfff0b0, ((k + 0.5) / (lv * 2)) * r.w, 0.6 + (k % 2) * 0.05, 0.06, 0.07, 0.07, 0.07, { emissive: 0xffe0a0, emissiveIntensity: 1.6 })); }
+      if (this.journey) { const dead = []; grp.traverse((o) => { if (o.isSprite) dead.push(o); }); dead.forEach((o) => o.parent.remove(o)); }   // soft glow sprites are for the top-down view; in first person they show up as stray dots on some phones
       if (r.born && Date.now() - r.born < 3000) grp.userData.born = performance.now();
       this.scene.add(grp); this.propGroups.set(r.id, grp);
     }
     for (const [id, grp] of this.propGroups) if (!alive.has(id)) { this.scene.remove(grp); this.propGroups.delete(id); }
     while (this.lamps.children.length) this.lamps.remove(this.lamps.children[0]);
-    for (const r of s.rooms) { const gl = glowSprite(0xffd890, 2.4, 0.75); gl.position.set(r.x + r.w / 2, FLOOR_H + 1.12, r.y + r.h / 2); this.lamps.add(gl); this.lamps.add(sph(0xfff0b0, r.x + r.w / 2, FLOOR_H + 1.18, r.y + r.h / 2, 0.1, 0.1, 0.1, { emissive: 0xffe0a0, emissiveIntensity: 1.6 })); }
+    for (const r of s.rooms) this.lamps.add(sph(0xfff0b0, r.x + r.w / 2, FLOOR_H + 1.18, r.y + r.h / 2, 0.11, 0.11, 0.11, { emissive: 0xffe0a0, emissiveIntensity: 1.6 }));
     this.updateSel();
     if (sim.lastUnfold && sim.lastUnfold.t !== this.lastUnfold) { this.lastUnfold = sim.lastUnfold.t; this.burst(sim.lastUnfold.dir); }
   }
@@ -263,7 +264,7 @@ export class InsideView {
   }
   reach() { this.reachT = 0.32; }
   setJourney(on) {
-    this.journey = on; this.dustPts.visible = !on; this.handsGroup.visible = on; this.handsGroup.scale.setScalar(0.8); if (!on) this.setHeld(null); this.built = -1; this.ceiling.visible = on; this.lamps.visible = on; this.jprops.visible = on;
+    this.journey = on; this.dustPts.visible = !on && !(LOOK.grade && LOOK.grade.edge > 0); this.handsGroup.visible = on; this.handsGroup.scale.setScalar(0.8); if (!on) this.setHeld(null); this.built = -1; this.ceiling.visible = on; this.lamps.visible = on; this.jprops.visible = on;
     this.gridLines.visible = !on; if (on) { this.sel.visible = false; this.ghost.visible = false; }
   }
   // Things you can use in person: the conductor's post, the tea urns, and anything left lying about.
